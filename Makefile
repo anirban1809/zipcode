@@ -5,7 +5,7 @@
 
 # ---- Project metadata ------------------------------------------------------
 APP_NAME       := zipcode
-CMD_DIR        := ./cmd/zipcode
+CMD_DIR        := .
 BIN_DIR        := ./bin
 DIST_DIR       := ./dist
 

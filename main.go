@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
@@ -12,9 +13,9 @@ import (
 
 type model struct {
 	header      string
-	output      string
 	promptWidth int
 	prompt      textinput.Model
+	result      viewport.Model
 }
 
 type RootModel struct {
@@ -32,7 +33,7 @@ func initialRootModel(width int, height int) RootModel {
 
 func initialModel(promptWidth int) model {
 	ti := textinput.New()
-	ti.Placeholder = "Type your command..."
+	ti.Placeholder = "Start here...."
 	ti.Focus()
 
 	wd, err := os.Getwd()
@@ -41,9 +42,11 @@ func initialModel(promptWidth int) model {
 		wd = ""
 	}
 
+	vp := viewport.New(100, 20)
+	vp.SetContent("Thinking...")
+
 	return model{
-		header:      fmt.Sprintf("ZipCode v0.0.1 \nworkspace: %s \nllm: claude-4-sonnet", wd),
-		output:      "Waiting for input...",
+		header:      fmt.Sprintf("ZipCode v0.0.1 \nWorkspace: %s \nModel: claude-4-sonnet", wd),
 		prompt:      ti,
 		promptWidth: promptWidth,
 	}
@@ -66,9 +69,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.model.promptWidth = msg.Width - 6
+		m.model.result.SetContent("Thinking...")
+		m.model.result.Width = msg.Width - 8
+		m.model.result.Height = msg.Height - 11
 	}
 
 	m.model, modelCmd = m.model.Update(msg)
+
 	cmd = append(cmd, modelCmd)
 
 	return m, tea.Batch(cmd...)
@@ -84,7 +91,6 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
 		case "enter":
-			m.output = fmt.Sprintf("→ running task: %s", m.prompt.Value())
 			m.prompt.SetValue("")
 		}
 	}
@@ -95,14 +101,14 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 
 func (m RootModel) View() string {
 	content := m.model.View()
-	return lipgloss.NewStyle().Height(m.height - 2).Width(m.width - 2).Border(lipgloss.RoundedBorder()).Padding(1).Render(content)
+	return lipgloss.NewStyle().Height(m.height - 2).Width(m.width - 2).Border(lipgloss.RoundedBorder()).PaddingLeft(1).PaddingRight(1).Render(content)
 }
 
 func (m model) View() string {
 	header := lipgloss.NewStyle().Foreground(lipgloss.Color("36")).Render(m.header)
-	output := lipgloss.NewStyle().Render(m.output)
-	prompt := lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).Width(m.promptWidth).Render("" + m.prompt.View())
-	return fmt.Sprintf("%s\n%s\n%s", header, output, prompt)
+	prompt := lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).Width(m.promptWidth).PaddingBottom(1).Render("" + m.prompt.View())
+	result := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1).Render(m.result.View())
+	return fmt.Sprintf("%s\n%s\n%s", header, prompt, result)
 }
 
 func main() {

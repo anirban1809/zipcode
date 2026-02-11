@@ -21,6 +21,7 @@ type model struct {
 	prompt        textinput.Model
 	result        viewport.Model
 	commands      []string
+	commandDesc   map[string]string
 	modelOptions  []string
 	filtered      []string
 	selected      int
@@ -40,6 +41,7 @@ type RootModel struct {
 
 const maxCommandMenuRows = 6
 const headerExtraHeight = 1
+const footerHeight = 2
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
@@ -53,7 +55,7 @@ func (m *RootModel) adjustLayout() {
 	m.model.promptWidth = m.width - 6
 	m.model.result.Width = m.width - 8
 
-	baseHeight := m.height - 11 - headerExtraHeight
+	baseHeight := m.height - 11 - headerExtraHeight - footerHeight
 	if m.model.showMenu && len(m.model.filtered) > 0 {
 		// menu rows + spacer line
 		baseHeight -= m.model.visibleMenuCount() + 1
@@ -94,6 +96,22 @@ func initialModel(promptWidth int) model {
 		commands: []string{
 			"/init", "/models", "/quit", "/help", "/status", "/config", "/auth",
 			"/sync", "/deploy", "/logs", "/doctor", "/clear", "/version", "/theme",
+		},
+		commandDesc: map[string]string{
+			"/init":    "Initialize the current workspace session",
+			"/models":  "Open model picker and switch active model",
+			"/quit":    "Exit the application",
+			"/help":    "Show help and available command usage",
+			"/status":  "Display current session and environment status",
+			"/config":  "View or adjust mock configuration settings",
+			"/auth":    "Manage mock authentication state",
+			"/sync":    "Run a mock workspace sync operation",
+			"/deploy":  "Start a mock deploy flow",
+			"/logs":    "Show recent mock execution logs",
+			"/doctor":  "Run mock diagnostics checks",
+			"/clear":   "Clear the result/output area",
+			"/version": "Show application version details",
+			"/theme":   "Switch UI theme options (mock)",
 		},
 		modelOptions: []string{"claude-4-sonnet", "claude-4-opus", "gemini-2.0-flash", "gpt-4.1"},
 		selected:     0,
@@ -165,7 +183,7 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c", "esc":
 			fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
 			fmt.Print("\nUsage Summary\r\n---------------------------\r\nTotal Tokens Uploaded: 3000\r\nTotal Tokens Downloaded: 3345\n\n")
 			return m, tea.Quit
@@ -256,29 +274,51 @@ func (m model) View() string {
 		Render(lipgloss.JoinVertical(lipgloss.Left, title, headerInfo))
 	prompt := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false).Width(m.promptWidth).Render("" + m.prompt.View())
 	result := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1).Render(m.result.View())
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		Render(footerText())
 
 	menu := ""
 	if m.showMenu && len(m.filtered) > 0 {
 		var rows []string
 		start, end := m.menuWindow()
+		maxCommandWidth := 0
+		if m.menuKind == "commands" {
+			for _, command := range m.filtered[start:end] {
+				if len(command) > maxCommandWidth {
+					maxCommandWidth = len(command)
+				}
+			}
+		}
 		for i, command := range m.filtered[start:end] {
 			index := start + i
 			prefix := "  "
-			style := lipgloss.NewStyle()
+			commandStyle := lipgloss.NewStyle()
+			descriptionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
 			if index == m.selected {
 				prefix = "> "
-				style = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
+				commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
+				descriptionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 			}
-			rows = append(rows, style.Render(prefix+command))
+
+			if m.menuKind == "commands" {
+				desc := m.commandDesc[command]
+				if desc != "" {
+					rows = append(rows, commandStyle.Render(fmt.Sprintf("%s%-*s", prefix, maxCommandWidth, command))+descriptionStyle.Render(fmt.Sprintf("  %s", desc)))
+					continue
+				}
+			}
+
+			rows = append(rows, commandStyle.Render(prefix+command))
 		}
 		menu = lipgloss.NewStyle().Width(m.promptWidth).Render(strings.Join(rows, "\n"))
 	}
 
 	if menu != "" {
-		return fmt.Sprintf("%s\n%s\n%s\n\n%s", header, prompt, menu, result)
+		return fmt.Sprintf("%s\n%s\n%s\n\n%s\n\n\n%s", header, prompt, menu, result, footer)
 	}
 
-	return fmt.Sprintf("%s\n%s\n\n%s", header, prompt, result)
+	return fmt.Sprintf("%s\n%s\n\n%s\n\n\n\n%s", header, prompt, result, footer)
 }
 
 func (m *model) updateCommandSuggestions() {
@@ -353,7 +393,7 @@ func (m model) runCommand(command string) (model, tea.Cmd) {
 
 func (m *model) updateHeader() {
 	m.header = fmt.Sprintf(
-		"Workspace: %s\nModel: %s\nCommands: /init  /models  /quit\nShortcuts: Enter run | Up/Down navigate | Tab select",
+		"Workspace: %s\nModel: %s",
 		m.workspace,
 		m.currentModel,
 	)
@@ -451,6 +491,13 @@ func initialResultContent() string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func footerText() string {
+	return strings.Join([]string{
+		"Shortcuts: ⏎ submit | ⇧+↵ newline | ↑/↓ menu-or-scroll | ⇥ select | ⌃+C quit",
+		"Session (mock): Uptime 00:12:47 | Input 3.2k tok | Output 4.8k tok | Latency 420ms",
+	}, "\n")
 }
 
 func main() {

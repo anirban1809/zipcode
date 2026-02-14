@@ -31,6 +31,7 @@ type model struct {
 	waiting       bool
 	spinnerIndex  int
 	pendingPrompt string
+	clearOnExit   bool
 }
 
 type RootModel struct {
@@ -94,24 +95,14 @@ func initialModel(promptWidth int) model {
 		promptWidth:  promptWidth,
 		result:       vp,
 		commands: []string{
-			"/init", "/models", "/quit", "/help", "/status", "/config", "/auth",
-			"/sync", "/deploy", "/logs", "/doctor", "/clear", "/version", "/theme",
+			"/init", "/models", "/quit", "/help", "/status",
 		},
 		commandDesc: map[string]string{
-			"/init":    "Initialize the current workspace session",
-			"/models":  "Open model picker and switch active model",
-			"/quit":    "Exit the application",
-			"/help":    "Show help and available command usage",
-			"/status":  "Display current session and environment status",
-			"/config":  "View or adjust mock configuration settings",
-			"/auth":    "Manage mock authentication state",
-			"/sync":    "Run a mock workspace sync operation",
-			"/deploy":  "Start a mock deploy flow",
-			"/logs":    "Show recent mock execution logs",
-			"/doctor":  "Run mock diagnostics checks",
-			"/clear":   "Clear the result/output area",
-			"/version": "Show application version details",
-			"/theme":   "Switch UI theme options (mock)",
+			"/init":   "Initialize the current workspace session",
+			"/models": "Open model picker and switch active model",
+			"/quit":   "Exit the application",
+			"/help":   "Show help and available command usage",
+			"/status": "Display current session and environment status",
 		},
 		modelOptions: []string{"claude-4-sonnet", "claude-4-opus", "gemini-2.0-flash", "gpt-4.1"},
 		selected:     0,
@@ -156,7 +147,10 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 			return m, nil
 		}
 		m.spinnerIndex = (m.spinnerIndex + 1) % len(spinnerFrames)
-		m.result.SetContent(fmt.Sprintf("%s Waiting for response...\n\nPrompt: %s", spinnerFrames[m.spinnerIndex], m.pendingPrompt))
+
+		styledPrompt := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(m.pendingPrompt)
+		styledSpinner := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81")).Render(spinnerFrames[m.spinnerIndex])
+		m.result.SetContent(fmt.Sprintf("%s Thinking...\n\n> %s", styledSpinner, styledPrompt))
 		return m, spinnerTickCmd()
 
 	case spinnerDoneMsg:
@@ -203,7 +197,7 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 				m.ensureMenuSelectionVisible()
 				return m, nil
 			}
-			m.result.LineUp(1)
+			m.result.ScrollUp(1)
 			return m, nil
 
 		case "down":
@@ -212,7 +206,7 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 				m.ensureMenuSelectionVisible()
 				return m, nil
 			}
-			m.result.LineDown(1)
+			m.result.ScrollUp(1)
 			return m, nil
 
 		case "tab":
@@ -259,20 +253,20 @@ func (m RootModel) View() string {
 		Width(m.width - 2).
 		Foreground(lipgloss.Color("252")).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#8989f0")).
+		BorderForeground(lipgloss.Color("#036ee8")).
 		PaddingLeft(1).
 		PaddingRight(1).
 		Render(content)
 }
 
 func (m model) View() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81")).Render("ZIPCODE: v0.0.1")
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4b83fb")).Render("ZIPCODE: v0.0.1")
 	headerInfo := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("36")).
 		Render(m.header)
 	header := lipgloss.NewStyle().
 		Render(lipgloss.JoinVertical(lipgloss.Left, title, headerInfo))
-	prompt := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false).Width(m.promptWidth).Render("" + m.prompt.View())
+	prompt := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false).BorderForeground(lipgloss.Color("245")).Width(m.promptWidth).Render("" + m.prompt.View())
 	result := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1).Render(m.result.View())
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
@@ -296,15 +290,15 @@ func (m model) View() string {
 			commandStyle := lipgloss.NewStyle()
 			descriptionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
 			if index == m.selected {
-				prefix = "> "
+				prefix = "-> "
 				commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
-				descriptionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+				descriptionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 			}
 
 			if m.menuKind == "commands" {
 				desc := m.commandDesc[command]
 				if desc != "" {
-					rows = append(rows, commandStyle.Render(fmt.Sprintf("%s%-*s", prefix, maxCommandWidth, command))+descriptionStyle.Render(fmt.Sprintf("  %s", desc)))
+					rows = append(rows, commandStyle.Render(fmt.Sprintf("%s%-*s", prefix, maxCommandWidth+20, command))+descriptionStyle.Render(fmt.Sprintf("  %s", desc)))
 					continue
 				}
 			}
@@ -379,7 +373,7 @@ func (m model) runCommand(command string) (model, tea.Cmd) {
 		m.result.SetContent("Select a model")
 		return m, nil
 	case "/quit":
-		fmt.Print("\nUsage Summary\r\n---------------------------\r\nTotal Tokens Uploaded: 3000\r\nTotal Tokens Downloaded: 3345\n\n")
+		m.clearOnExit = true
 		return m, tea.Quit
 	default:
 		if strings.HasPrefix(command, "/") {
@@ -455,7 +449,6 @@ func (m model) startMockResponse(promptData string) (model, tea.Cmd) {
 	m.waiting = true
 	m.spinnerIndex = 0
 	m.pendingPrompt = promptData
-	m.result.SetContent(fmt.Sprintf("%s Waiting for response...\n\nPrompt: %s", spinnerFrames[m.spinnerIndex], promptData))
 	return m, tea.Batch(spinnerTickCmd(), spinnerDoneCmd())
 }
 
@@ -474,20 +467,13 @@ func spinnerDoneCmd() tea.Cmd {
 func initialResultContent() string {
 	lines := []string{
 		"Getting Started",
-		"",
+		"------------------",
 		"1. Type a prompt and press Enter to run it.",
 		"2. Type / to open command suggestions.",
 		"3. Use Up/Down to navigate menus.",
 		"4. Press Enter to execute a selected command.",
 		"5. Run /models to switch the active model.",
 		"6. Press Ctrl+C, q, or Esc to quit.",
-		"",
-		"Mock Output (Scrollable)",
-		"------------------------",
-	}
-
-	for i := 1; i <= 30; i++ {
-		lines = append(lines, fmt.Sprintf("Mock line %02d: example response chunk for viewport scrolling.", i))
 	}
 
 	return strings.Join(lines, "\n")
@@ -501,7 +487,6 @@ func footerText() string {
 }
 
 func main() {
-
 	fd := int(os.Stdout.Fd())
 	width, height, err := term.GetSize(fd)
 	if err != nil {
@@ -510,8 +495,13 @@ func main() {
 	fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
 	p := tea.NewProgram(initialRootModel(width, height))
 
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Println("Error:", err)
 		return
+	}
+
+	if root, ok := finalModel.(RootModel); ok && root.model.clearOnExit {
+		fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
 	}
 }

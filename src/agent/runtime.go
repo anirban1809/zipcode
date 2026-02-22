@@ -1,9 +1,10 @@
 package agent
 
+import "fmt"
+
 type Runtime struct {
-	prompt string
 }
 
-func (m *Runtime) Submit(prompt string) {
-	m.prompt = prompt
+func (r Runtime) Submit(prompt string) {
+	fmt.Println("Running: ", prompt)
 }

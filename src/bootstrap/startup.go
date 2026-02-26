@@ -1,16 +1,14 @@
 package bootstrap
 
 import (
-	"fmt"
-	"os"
+	"zipcode/src/ui"
+	"zipcode/src/workspace"
 )
 
-func Startup() {
-	dir, err := os.Getwd()
+func InitialModel(intent StartupIntent) ui.AppModel {
+	workspace := workspace.Load(intent.Workspace)
 
-	if err != nil {
-		fmt.Println("Failed to get working directory")
+	return ui.AppModel{
+		Workspace: workspace,
 	}
-
-	fmt.Printf("Working directory: %s\n", dir)
 }

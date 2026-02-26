@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,6 +33,8 @@ type model struct {
 	spinnerIndex  int
 	pendingPrompt string
 	clearOnExit   bool
+	spinner       spinner.Model
+	spinning      bool
 }
 
 type RootModel struct {
@@ -44,7 +47,10 @@ const maxCommandMenuRows = 6
 const headerExtraHeight = 1
 const footerHeight = 2
 
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+var spinnerFrames = spinner.Spinner{
+	Frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+	FPS:    time.Second / 10, //nolint:mnd
+}
 
 const spinnerInterval = 120 * time.Millisecond
 const mockResponseDelay = 3 * time.Second
@@ -86,7 +92,10 @@ func initialModel(promptWidth int) model {
 	}
 
 	vp := viewport.New(100, 20)
-	vp.SetContent(initialResultContent())
+
+	initialContent := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(initialResultContent())
+
+	vp.SetContent(initialContent)
 
 	m := model{
 		workspace:    wd,
@@ -106,6 +115,7 @@ func initialModel(promptWidth int) model {
 		},
 		modelOptions: []string{"claude-4-sonnet", "claude-4-opus", "gemini-2.0-flash", "gpt-4.1"},
 		selected:     0,
+		spinner:      spinner.New(spinner.WithSpinner(spinnerFrames)),
 	}
 	m.updateHeader()
 	return m
@@ -127,7 +137,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.adjustLayout()
 	}
 
 	m.model, modelCmd = m.model.Update(msg)
@@ -142,18 +151,26 @@ func (m model) Update(msg tea.Msg) (model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case spinnerTickMsg:
+
+	case spinner.TickMsg:
+		if !m.spinning {
+			return m, nil
+		}
+
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case planningDoneMsg:
 		if !m.waiting {
 			return m, nil
 		}
-		m.spinnerIndex = (m.spinnerIndex + 1) % len(spinnerFrames)
+		promptData := m.pendingPrompt
+		// m.waiting = false
+		m.spinnerIndex = 0
+		m.result.SetContent(fmt.Sprintf("Thinking: %s", promptData))
+		return m, thinkCmd()
 
-		styledPrompt := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(m.pendingPrompt)
-		styledSpinner := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81")).Render(spinnerFrames[m.spinnerIndex])
-		m.result.SetContent(fmt.Sprintf("%s Thinking...\n\n> %s", styledSpinner, styledPrompt))
-		return m, spinnerTickCmd()
-
-	case spinnerDoneMsg:
+	case thinkingDoneMsg:
 		if !m.waiting {
 			return m, nil
 		}
@@ -259,7 +276,14 @@ func (m RootModel) View() string {
 		Render(content)
 }
 
+// main view function
 func (m model) View() string {
+
+	var spinnerContent string
+	if m.spinning {
+		spinnerContent = m.spinner.View()
+	}
+
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4b83fb")).Render("ZIPCODE: v0.0.1")
 	headerInfo := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("36")).
@@ -267,7 +291,7 @@ func (m model) View() string {
 	header := lipgloss.NewStyle().
 		Render(lipgloss.JoinVertical(lipgloss.Left, title, headerInfo))
 	prompt := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false).BorderForeground(lipgloss.Color("245")).Width(m.promptWidth).Render("" + m.prompt.View())
-	result := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1).Render(m.result.View())
+	result := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1).Render(fmt.Sprintf("%s %s", spinnerContent, m.result.View()))
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
 		Render(footerText())
@@ -449,19 +473,32 @@ func (m model) startMockResponse(promptData string) (model, tea.Cmd) {
 	m.waiting = true
 	m.spinnerIndex = 0
 	m.pendingPrompt = promptData
-	return m, tea.Batch(spinnerTickCmd(), spinnerDoneCmd())
+
+	if !m.waiting {
+		return m, nil
+	}
+
+	styledPrompt := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(m.pendingPrompt)
+	m.result.SetContent(fmt.Sprintf("Planning...\n\n> %s", styledPrompt))
+	m.spinning = true
+	return m, tea.Batch(m.spinner.Tick, planCmd())
 }
 
-func spinnerTickCmd() tea.Cmd {
-	return tea.Tick(spinnerInterval, func(time.Time) tea.Msg {
-		return spinnerTickMsg{}
-	})
+type planningDoneMsg struct{}
+type thinkingDoneMsg struct{}
+
+func planCmd() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(600 * time.Millisecond)
+		return planningDoneMsg{}
+	}
 }
 
-func spinnerDoneCmd() tea.Cmd {
-	return tea.Tick(mockResponseDelay, func(time.Time) tea.Msg {
-		return spinnerDoneMsg{}
-	})
+func thinkCmd() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(600 * time.Millisecond)
+		return thinkingDoneMsg{}
+	}
 }
 
 func initialResultContent() string {
@@ -473,7 +510,7 @@ func initialResultContent() string {
 		"3. Use Up/Down to navigate menus.",
 		"4. Press Enter to execute a selected command.",
 		"5. Run /models to switch the active model.",
-		"6. Press Ctrl+C, q, or Esc to quit.",
+		"6. Press Ctrl+C or Esc to quit.",
 	}
 
 	return strings.Join(lines, "\n")

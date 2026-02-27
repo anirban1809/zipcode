@@ -1,32 +1,30 @@
 package agent
 
-import llm "zipcode/src/llm/provider"
+import "fmt"
 
-type RuntimeStatus int
-
-const (
-	Initializing RuntimeStatus = iota
-	Planning
-	Running
-	Succeeded
-	Failed
-	Cancelled
-)
-
+// remove once all types are implemented
 type NotImplemented struct{}
 
 type Runtime struct {
-	ID           string
-	StartTime    string
-	Status       RuntimeStatus
-	PolicyEngine NotImplemented
-	Planner      NotImplemented
-	Executor     NotImplemented
-	EventBus     NotImplemented
-	Store        NotImplemented //optional
-	Ctx          NotImplemented
+	Prompt   string
+	Planner  Planner
+	Executor Executor
 }
 
-func NewRuntime(llmProvider llm.LLMProvider) Runtime {
+func NewRuntime() Runtime {
 	return Runtime{}
+}
+
+func (r Runtime) Run(prompt string) {
+	r.Prompt = prompt
+	steps := r.Planner.Plan(r.Prompt)
+
+	for _, step := range steps {
+		status := r.Executor.Execute(step)
+
+		if status == ExecutionFailed {
+			fmt.Println("Execution Failed, exiting operation")
+			break
+		}
+	}
 }

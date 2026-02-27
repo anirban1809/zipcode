@@ -5,13 +5,13 @@ import (
 	"os"
 	"strings"
 	"time"
+	"zipcode/src/agent"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
 )
 
 type model struct {
@@ -524,21 +524,24 @@ func footerText() string {
 }
 
 func main() {
-	fd := int(os.Stdout.Fd())
-	width, height, err := term.GetSize(fd)
-	if err != nil {
-		fmt.Println("Failed to get terminal size. Exiting")
-	}
-	fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
-	p := tea.NewProgram(initialRootModel(width, height))
+	// fd := int(os.Stdout.Fd())
+	// width, height, err := term.GetSize(fd)
+	// if err != nil {
+	// 	fmt.Println("Failed to get terminal size. Exiting")
+	// }
+	// fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
+	// p := tea.NewProgram(initialRootModel(width, height))
 
-	finalModel, err := p.Run()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+	// finalModel, err := p.Run()
+	// if err != nil {
+	// 	fmt.Println("Error:", err)
+	// 	return
+	// }
 
-	if root, ok := finalModel.(RootModel); ok && root.model.clearOnExit {
-		fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
-	}
+	// if root, ok := finalModel.(RootModel); ok && root.model.clearOnExit {
+	// 	fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
+	// }
+
+	runtime := agent.NewRuntime()
+	runtime.Run("Build this for me")
 }

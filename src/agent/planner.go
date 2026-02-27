@@ -5,6 +5,11 @@ import (
 	llm "zipcode/src/llm/provider"
 )
 
+type Plan struct {
+	Steps       []PlanStep
+	Validations []StepValidationResult
+}
+
 type PlanStep struct {
 	StepId   int
 	StepTask string
@@ -21,7 +26,7 @@ func CreatePlanStep(stepId int, task string) PlanStep {
 	}
 }
 
-func (p Planner) Plan(prompt string) []PlanStep {
+func (p Planner) CreatePlan(prompt string) Plan {
 
 	initialStep := 0
 	steps := []PlanStep{}
@@ -31,5 +36,31 @@ func (p Planner) Plan(prompt string) []PlanStep {
 		initialStep++
 	}
 
-	return steps
+	return Plan{
+		Steps: steps,
+	}
+}
+
+type StepValidationResult struct {
+	Valid         bool
+	InvalidReason string
+}
+
+func (p Planner) ValidatePlan(plan *Plan) []StepValidationResult {
+	validationResult := []StepValidationResult{}
+
+	for i, step := range plan.Steps {
+
+		if i == 2 {
+			validationResult = append(validationResult, StepValidationResult{Valid: false})
+		}
+
+		validationResult = append(validationResult, p.ValidateStep(&step))
+	}
+
+	return validationResult
+}
+
+func (p Planner) ValidateStep(step *PlanStep) StepValidationResult {
+	return StepValidationResult{Valid: true}
 }

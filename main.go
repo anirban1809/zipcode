@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 	"zipcode/src/agent"
+	"zipcode/src/workspace"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -542,6 +543,7 @@ func main() {
 	// 	fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
 	// }
 
-	runtime := agent.NewRuntime()
+	workspace := workspace.Load("/Users/anirban/Documents/Code/zipcode")
+	runtime := agent.NewRuntime(&workspace)
 	runtime.Run("Build this for me")
 }

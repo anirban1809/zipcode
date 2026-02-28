@@ -23,6 +23,16 @@ func NewOpenAIProvider() LLMProvider {
 	}
 }
 
+type Input struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type Request struct {
+	Model string  `json:"model"`
+	Input []Input `json:"input"`
+}
+
 type Response struct {
 	Output []struct {
 		Type    string `json:"type"`
@@ -35,25 +45,33 @@ type Response struct {
 
 func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, error) {
 	fmt.Println("Running open ai call...")
-
 	err := godotenv.Load()
-
 	if err != nil {
 		fmt.Println("Failed to load env file")
 	}
 
-	body := []byte(fmt.Sprintf(`
-									{
-        "model": "gpt-5-mini",
-        "input": [
-            {
-                "role": "user",
-                "content": "Create a simple 3 step plan on how to create a typescript function"
-            }
-        ]
-    }`))
+	requestBody := Request{
+		Model: "gpt-5-mini",
+		Input: []Input{{Content: "Create a simple 3 step plan on how to create a python function", Role: "user"}},
+	}
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/responses", bytes.NewReader(body))
+	// requestBody.Input[0].Content = "Create a simple 3 step plan on how to create a python function"
+	// requestBody.Input[0].Role = "user"
+
+	value, err := json.Marshal(requestBody)
+
+	// body := fmt.Appendf(nil, `
+	// 								{
+	//     "model": "gpt-5-mini",
+	//     "input": [
+	//         {
+	//             "role": "user",
+	//             "content": "Create a simple 3 step plan on how to create a typescript function"
+	//         }
+	//     ]
+	// }`)
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/responses", bytes.NewReader(value))
 
 	if err != nil {
 		return "", err

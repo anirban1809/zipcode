@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	llm "zipcode/src/llm/provider"
+	"zipcode/src/workspace"
 )
 
 type Plan struct {
@@ -19,6 +20,12 @@ type Planner struct {
 	llm llm.LLMProvider
 }
 
+func NewPlanner(workspace *workspace.Workspace) Planner {
+	return Planner{
+		llm: llm.NewOpenAIProvider(),
+	}
+}
+
 func CreatePlanStep(stepId int, task string) PlanStep {
 	return PlanStep{
 		StepId:   stepId,
@@ -27,9 +34,6 @@ func CreatePlanStep(stepId int, task string) PlanStep {
 }
 
 func (p *Planner) CreatePlan(prompt string) Plan {
-
-	p.llm = llm.NewOpenAIProvider()
-
 	response, err := p.llm.Complete("", "Create a plan")
 
 	if err != nil {
@@ -70,7 +74,6 @@ func (p Planner) ValidatePlan(plan *Plan) []StepValidationResult {
 	validationResult := []StepValidationResult{}
 
 	for i, step := range plan.Steps {
-
 		if i == 2 {
 			validationResult = append(
 				validationResult,
@@ -80,12 +83,10 @@ func (p Planner) ValidatePlan(plan *Plan) []StepValidationResult {
 					Decision: Blocked,
 				},
 			)
-
 		}
 
 		validationResult = append(validationResult, p.ValidateStep(&step))
 	}
-
 	return validationResult
 }
 

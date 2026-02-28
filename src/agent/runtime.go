@@ -1,6 +1,9 @@
 package agent
 
-import "fmt"
+import (
+	"fmt"
+	"zipcode/src/workspace"
+)
 
 // remove once all types are implemented
 type NotImplemented struct{}
@@ -21,9 +24,10 @@ type Runtime struct {
 	Status   RuntimeStatus
 }
 
-func NewRuntime() Runtime {
+func NewRuntime(workspace *workspace.Workspace) Runtime {
 	return Runtime{
-		Status: Idle,
+		Status:  Idle,
+		Planner: NewPlanner(workspace),
 	}
 }
 

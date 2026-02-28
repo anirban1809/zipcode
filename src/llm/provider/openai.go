@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"zipcode/src/llm/prompts"
 
 	"github.com/joho/godotenv"
 )
@@ -52,7 +53,13 @@ func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, er
 
 	requestBody := Request{
 		Model: "gpt-5-mini",
-		Input: []Input{{Content: "Create a simple 3 step plan on how to create a python function", Role: "user"}},
+		Input: []Input{{
+			Content: prompts.IntentClassifier,
+			Role:    "system",
+		}, {
+			Content: "Login fails when password contains special characters",
+			Role:    "user",
+		}},
 	}
 
 	// requestBody.Input[0].Content = "Create a simple 3 step plan on how to create a python function"

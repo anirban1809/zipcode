@@ -1,5 +1,5 @@
 package llm
 
 type LLMProvider interface {
-	ID()
+	Complete(systemPrompt string, userPrompt string) (string, error)
 }

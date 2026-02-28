@@ -16,7 +16,7 @@ type PlanStep struct {
 }
 
 type Planner struct {
-	LLMProvider llm.LLMProvider
+	llm llm.LLMProvider
 }
 
 func CreatePlanStep(stepId int, task string) PlanStep {
@@ -26,7 +26,17 @@ func CreatePlanStep(stepId int, task string) PlanStep {
 	}
 }
 
-func (p Planner) CreatePlan(prompt string) Plan {
+func (p *Planner) CreatePlan(prompt string) Plan {
+
+	p.llm = llm.NewOpenAIProvider()
+
+	response, err := p.llm.Complete("", "Create a plan")
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(response)
 
 	initialStep := 0
 	steps := []PlanStep{}
@@ -41,9 +51,19 @@ func (p Planner) CreatePlan(prompt string) Plan {
 	}
 }
 
+type StepDecision int
+
+const (
+	Allowed StepDecision = iota
+	Blocked
+	NeedApproval
+)
+
 type StepValidationResult struct {
-	Valid         bool
-	InvalidReason string
+	Valid    bool
+	Error    string
+	Warning  string
+	Decision StepDecision
 }
 
 func (p Planner) ValidatePlan(plan *Plan) []StepValidationResult {
@@ -52,7 +72,15 @@ func (p Planner) ValidatePlan(plan *Plan) []StepValidationResult {
 	for i, step := range plan.Steps {
 
 		if i == 2 {
-			validationResult = append(validationResult, StepValidationResult{Valid: false})
+			validationResult = append(
+				validationResult,
+				StepValidationResult{
+					Valid:    false,
+					Error:    "Invariant violation",
+					Decision: Blocked,
+				},
+			)
+
 		}
 
 		validationResult = append(validationResult, p.ValidateStep(&step))

@@ -41,7 +41,7 @@ func (r Runtime) Run(prompt string) {
 			status = r.Executor.Execute(step)
 			continue
 		} else {
-			fmt.Println("Plan validation failed, halting operation")
+			fmt.Println("Plan validation failed, halting operation. Reason:", validationReport[i].Error)
 		}
 
 		if status == ExecutionFailed {

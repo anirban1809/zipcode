@@ -18,24 +18,32 @@ const (
 )
 
 type Runtime struct {
-	Prompt   string
-	Planner  Planner
-	Executor Executor
-	Status   RuntimeStatus
+	Prompt    string
+	Planner   Planner
+	Executor  Executor
+	Status    RuntimeStatus
+	Workspace *workspace.Workspace
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
 	return Runtime{
-		Status:  Idle,
-		Planner: NewPlanner(workspace),
+		Status:    Idle,
+		Planner:   NewPlanner(workspace),
+		Workspace: workspace,
 	}
 }
 
-func (r Runtime) Run(prompt string) {
+func (r Runtime) Run(prompt string) error {
 	r.Status = Running
 	r.Prompt = prompt
-	plan := r.Planner.CreatePlan(r.Prompt)
 
+	intent, err := r.Planner.ClassifyIntent(prompt)
+
+	if err != nil {
+		return err
+	}
+
+	plan := r.Planner.CreatePlan(r.Prompt, intent, r.Workspace)
 	validationReport := r.Planner.ValidatePlan(&plan)
 
 	for i, step := range plan.Steps {
@@ -56,4 +64,5 @@ func (r Runtime) Run(prompt string) {
 
 	//execution completed, status returns to idle
 	r.Status = Idle
+	return nil
 }

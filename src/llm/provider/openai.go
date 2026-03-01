@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"zipcode/src/llm/prompts"
 
 	"github.com/joho/godotenv"
 )
@@ -54,10 +53,10 @@ func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, er
 	requestBody := Request{
 		Model: "gpt-5-mini",
 		Input: []Input{{
-			Content: prompts.IntentClassifier,
+			Content: systemPrompt,
 			Role:    "system",
 		}, {
-			Content: "Add support for showing a greeting to the user based on the current time in the home page in Home.tsx",
+			Content: userPrompt,
 			Role:    "user",
 		}},
 	}
@@ -89,6 +88,8 @@ func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, er
 	if err != nil {
 		return "", err
 	}
+
+	fmt.Println(outputMap.Output[1].Content[0].Text)
 
 	return outputMap.Output[1].Content[0].Text, nil
 

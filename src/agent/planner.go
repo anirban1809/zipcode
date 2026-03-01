@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
+	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/workspace"
 )
@@ -9,6 +11,17 @@ import (
 type Plan struct {
 	Steps       []PlanStep
 	Validations []StepValidationResult
+}
+
+type Intent struct {
+	Category                 string   `json:"category"`
+	OperationType            string   `json:"operation_type"`
+	RiskLevel                string   `json:"risk_level"`
+	RequiresNewFiles         bool     `json:"requires_new_files"`
+	RequiresFileModification bool     `json:"requires_file_modification"`
+	RequiresDeletion         bool     `json:"requires_deletion"`
+	SearchIdentifiers        []string `json:"search_identifiers"`
+	TargetFiles              []any    `json:"target_files"`
 }
 
 type PlanStep struct {
@@ -33,15 +46,20 @@ func CreatePlanStep(stepId int, task string) PlanStep {
 	}
 }
 
-func (p *Planner) CreatePlan(prompt string) Plan {
-	response, err := p.llm.Complete("", "Create a plan")
-
+func (p *Planner) ClassifyIntent(prompt string) (*Intent, error) {
+	intentStr, err := p.llm.Complete(prompts.IntentClassifier, prompt)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
+	var intent Intent
+	err = json.Unmarshal([]byte(intentStr), &intent)
+	if err != nil {
+		return nil, err
+	}
+	return &intent, nil
+}
 
-	fmt.Println(response)
-
+func (p *Planner) CreatePlan(prompt string, intent *Intent, workspace *workspace.Workspace) Plan {
 	initialStep := 0
 	steps := []PlanStep{}
 

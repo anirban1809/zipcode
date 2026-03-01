@@ -57,26 +57,12 @@ func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, er
 			Content: prompts.IntentClassifier,
 			Role:    "system",
 		}, {
-			Content: "Login fails when password contains special characters",
+			Content: "Add support for showing a greeting to the user based on the current time in the home page in Home.tsx",
 			Role:    "user",
 		}},
 	}
 
-	// requestBody.Input[0].Content = "Create a simple 3 step plan on how to create a python function"
-	// requestBody.Input[0].Role = "user"
-
 	value, err := json.Marshal(requestBody)
-
-	// body := fmt.Appendf(nil, `
-	// 								{
-	//     "model": "gpt-5-mini",
-	//     "input": [
-	//         {
-	//             "role": "user",
-	//             "content": "Create a simple 3 step plan on how to create a typescript function"
-	//         }
-	//     ]
-	// }`)
 
 	req, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/responses", bytes.NewReader(value))
 

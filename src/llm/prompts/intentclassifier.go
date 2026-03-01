@@ -27,7 +27,9 @@ Return ONLY a JSON object with the following structure:
   "risk_level": "<string>",
   "requires_new_files": <boolean>,
   "requires_file_modification": <boolean>,
-  "requires_deletion": <boolean>
+  "requires_deletion": <boolean>,
+  "search_identifiers":<string list>,
+  "target_files":<string list>
 }
 
 Do not include any additional fields.
@@ -110,6 +112,28 @@ CLASSIFICATION RULES
 
 7. If unclear or ambiguous
    → risk_level = "high"
+
+--------------------------------
+SEARCH IDENTIFIER RULES
+--------------------------------
+The field search_identifiers should be populated with the relevant keywords that
+can be used to search the code repository to determine the exact location of 
+changes needed.
+
+For example: A prompt like "Fix login errors when password contains special characters"
+should return search identifiers like "login", "password", "auth", "authorization" etc.
+
+Always return single words, no hyphenated words, no spaced words.
+
+Do not return any irrelevant identifiers.
+
+Return a maximum of 10 words and a minimum of 2 words. Always keep the number of words low as much as possible while covering matching use cases.
+
+--------------------------------
+TARGET FILES RULES
+--------------------------------
+
+If file names are available in the prompt, include them in this list.
 
 --------------------------------
 BOOLEAN FIELD RULES

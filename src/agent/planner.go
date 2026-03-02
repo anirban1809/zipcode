@@ -43,7 +43,7 @@ type Planner struct {
 
 func NewPlanner(workspace *workspace.Workspace) Planner {
 	return Planner{
-		llm:       llm.NewOpenAIProvider(),
+		llm:       llm.NewOpenRouterProvider(),
 		workspace: workspace,
 	}
 }

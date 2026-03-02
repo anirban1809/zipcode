@@ -8,5 +8,7 @@ type Workspace struct {
 }
 
 func Load(workspacePath string) Workspace {
-	return Workspace{}
+	return Workspace{
+		RootPath: workspacePath,
+	}
 }

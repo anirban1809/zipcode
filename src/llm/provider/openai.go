@@ -43,22 +43,22 @@ type Response struct {
 	} `json:"output"`
 }
 
-func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, error) {
+func (model OpenAI) Complete(systemPrompt string, userPrompt ...string) (string, error) {
 	fmt.Println("Running open ai call...")
 	err := godotenv.Load()
 	if err != nil {
 		fmt.Println("Failed to load env file")
 	}
 
+	prompts := []Input{{Content: systemPrompt, Role: "system"}}
+
+	for _, prompt := range userPrompt {
+		prompts = append(prompts, Input{Content: prompt, Role: "user"})
+	}
+
 	requestBody := Request{
 		Model: "gpt-5-mini",
-		Input: []Input{{
-			Content: systemPrompt,
-			Role:    "system",
-		}, {
-			Content: userPrompt,
-			Role:    "user",
-		}},
+		Input: prompts,
 	}
 
 	value, err := json.Marshal(requestBody)
@@ -89,8 +89,5 @@ func (model OpenAI) Complete(systemPrompt string, userPrompt string) (string, er
 		return "", err
 	}
 
-	fmt.Println(outputMap.Output[1].Content[0].Text)
-
 	return outputMap.Output[1].Content[0].Text, nil
-
 }

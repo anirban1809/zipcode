@@ -543,7 +543,7 @@ func main() {
 	// 	fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
 	// }
 
-	workspace := workspace.Load("/Users/anirban/Documents/Code/zipcode")
+	workspace := workspace.Load("/Users/anirban/Documents/Code/zoom-sync-flow")
 	runtime := agent.NewRuntime(&workspace)
-	runtime.Run("Add validation middleware to router setup")
+	runtime.Run("How does the auth workflow work?")
 }

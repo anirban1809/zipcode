@@ -37,30 +37,21 @@ func (r Runtime) Run(prompt string) error {
 	r.Status = Running
 	r.Prompt = prompt
 
-	intent, err := r.Planner.ClassifyIntent(prompt)
+	projectType, err := r.Planner.ClassifyProjectType()
 
 	if err != nil {
 		return err
 	}
 
-	plan := r.Planner.CreatePlan(r.Prompt, intent, r.Workspace)
-	validationReport := r.Planner.ValidatePlan(&plan)
+	intent, err := r.Planner.ClassifyIntent(prompt, projectType)
 
-	for i, step := range plan.Steps {
-		var status ExecutionResult
-
-		if validationReport[i].Valid {
-			status = r.Executor.Execute(step)
-			continue
-		} else {
-			fmt.Println("Plan validation failed, halting operation. Reason:", validationReport[i].Error)
-		}
-
-		if status == ExecutionFailed {
-			fmt.Println("Execution Failed, exiting operation")
-			break
-		}
+	if err != nil {
+		return err
 	}
+
+	files, err := r.Planner.ResolveScope(intent.SearchIdentifiers)
+
+	fmt.Println(files)
 
 	//execution completed, status returns to idle
 	r.Status = Idle

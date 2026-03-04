@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"fmt"
 	"zipcode/src/workspace"
 )
 
@@ -51,7 +50,7 @@ func (r Runtime) Run(prompt string) error {
 
 	files, err := r.Planner.ResolveScope(intent.SearchIdentifiers)
 
-	fmt.Println(files)
+	r.Planner.GenerateChanges(prompt, intent, files[0:3])
 
 	//execution completed, status returns to idle
 	r.Status = Idle

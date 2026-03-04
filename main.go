@@ -545,5 +545,9 @@ func main() {
 
 	workspace := workspace.Load("/Users/anirban/Documents/Code/zoom-sync-flow")
 	runtime := agent.NewRuntime(&workspace)
-	runtime.Run("How does the auth workflow work?")
+	err := runtime.Run("In the Home page, add dynamic greeting instead of a hardcoded greeting")
+
+	if err != nil {
+		panic(err)
+	}
 }

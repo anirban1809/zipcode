@@ -16,6 +16,11 @@ type OpenAI struct {
 	Model      string
 }
 
+// SetModel implements [LLMProvider].
+func (OpenAI) SetModel(model OpenRouterModel, nitro bool) {
+	panic("unimplemented")
+}
+
 func NewOpenAIProvider() LLMProvider {
 	return OpenAI{
 		ProviderId: "openai",

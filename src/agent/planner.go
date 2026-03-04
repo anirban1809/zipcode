@@ -57,6 +57,7 @@ func CreatePlanStep(stepId int, task string) PlanStep {
 
 func (p *Planner) ClassifyIntent(prompt string, projectType *ProjectTypeClassification) (*Intent, error) {
 	projectTypeStr, err := json.Marshal(projectType)
+	p.llm.SetModel(llm.MINIMAX_M2_5, true)
 	intentStr, err := p.llm.Complete(prompts.IntentClassifier, prompt, string(projectTypeStr))
 
 	fmt.Println(intentStr)
@@ -377,7 +378,32 @@ func (p *Planner) ResolveScope(searchIdentifiers []string) ([]string, error) {
 	}
 
 	frequentPaths := MostCommonPaths(&inputList)
+
+	fmt.Println(frequentPaths)
 	return frequentPaths, nil
 }
 
-//Note: To resolve the scope, take the files with the highest counts in rg search.
+func (p *Planner) GenerateChanges(prompt string, intent *Intent, files []string) (string, error) {
+	p.llm.SetModel(llm.MINIMAX_M2_5, true)
+	fileContext := ""
+
+	for _, filename := range files {
+		fileContent, err := os.ReadFile(filename)
+
+		if err != nil {
+			return "", err
+		}
+
+		fileContext = fmt.Sprintf("%s\n%s\n-----------\n%s", fileContext, filename, fileContent)
+	}
+
+	result, err := p.llm.Complete(prompts.ImplementFeature, prompt, fileContext, fmt.Sprintf("Requires new files: %b", intent.RequiresNewFiles))
+
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Println(result)
+
+	return "", nil
+}

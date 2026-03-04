@@ -39,6 +39,8 @@ Return strictly valid JSON matching this schema:
   "reasoning": "<short explanation>"
 }
 
+DO NOT include any backticks or json tags
+
 Allowed primary_type values:
 
   "react_spa": "Single-page React application using client-side routing and bundlers like Vite or Webpack.",

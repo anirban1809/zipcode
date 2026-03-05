@@ -107,6 +107,18 @@ type ProjectTypeClassification struct {
 	Reasoning          string            `json:"reasoning"`
 }
 
+func (p *Planner) StartConversation() (string, error) {
+	p.llm.SetModel(llm.MINIMAX_M2_5, true)
+
+	value, err := p.llm.Complete(prompts.MainSystemPrompt, "How does the notification system work in the project?")
+
+	if err != nil {
+		return "", err
+	}
+
+	return value, nil
+}
+
 func (p *Planner) ClassifyProjectType() (*ProjectTypeClassification, error) {
 	snapshot, err := GenerateRepoSnapshot(p.workspace.RootPath)
 	if err != nil {

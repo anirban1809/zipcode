@@ -36,23 +36,35 @@ func (r Runtime) Run(prompt string) error {
 	r.Status = Running
 	r.Prompt = prompt
 
-	projectType, err := r.Planner.ClassifyProjectType()
+	// for r.Status != Idle {
+	// 	response, err := r.Planner.StartConversation()
 
-	if err != nil {
-		return err
-	}
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-	intent, err := r.Planner.ClassifyIntent(prompt, projectType)
+	// 	next, err := r.Executor.ProcessResponse(response)
+	// }
 
-	if err != nil {
-		return err
-	}
+	r.Planner.StartConversation()
 
-	files, err := r.Planner.ResolveScope(intent.SearchIdentifiers)
+	// projectType, err := r.Planner.ClassifyProjectType()
 
-	r.Planner.GenerateChanges(prompt, intent, files[0:3])
+	// if err != nil {
+	// 	return err
+	// }
 
-	//execution completed, status returns to idle
-	r.Status = Idle
+	// intent, err := r.Planner.ClassifyIntent(prompt, projectType)
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	// files, err := r.Planner.ResolveScope(intent.SearchIdentifiers)
+
+	// r.Planner.GenerateChanges(prompt, intent, files[0:3])
+
+	// //execution completed, status returns to idle
+	// r.Status = Idle
 	return nil
 }

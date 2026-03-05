@@ -244,7 +244,7 @@ func (p *OpenRouterProvider) Complete(systemPrompt string, userPrompt ...string)
 
 			if ir.Choices[0].Delta.Content != "" {
 				finalOutput = fmt.Sprintf("%s%s", finalOutput, ir.Choices[0].Delta.Content)
-				fmt.Print(ir.Choices[0].Delta.Content)
+				// fmt.Print(ir.Choices[0].Delta.Content)
 			} else {
 				// fmt.Print(ir.Choices[0].Delta.Reasoning)
 			}

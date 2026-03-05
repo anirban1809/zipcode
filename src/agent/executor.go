@@ -1,18 +1,35 @@
 package agent
 
-import "fmt"
+import "encoding/json"
 
 type Executor struct{}
 
-type ExecutionResult int
+type ExecutionResultStatus int
 
 const (
-	ExecutionSucceeded ExecutionResult = iota
+	ExecutionSucceeded ExecutionResultStatus = iota
 	ExecutionFailed
 	ExecutionCancelled
+	ExecutionCompleted
 )
 
-func (e Executor) Execute(step PlanStep) ExecutionResult {
-	fmt.Println("Executing: ", step.StepTask)
-	return ExecutionSucceeded
+type ExecutionOutput interface {
+	string | int
+}
+
+type ResponseType string
+
+const (
+	TYPE_TOOL_CALL ResponseType = "tool_call"
+	TYPE_MESSAGE   ResponseType = "message"
+	TYPE_FINISH    ResponseType = "finish"
+)
+
+type LLMResponse struct {
+	Type ResponseType    `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
+
+func (e *Executor) ProcessResponse(response LLMResponse) (any, ExecutionResultStatus, error) {
+	return nil, 0, nil
 }

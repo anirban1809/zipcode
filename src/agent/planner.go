@@ -409,7 +409,7 @@ func (p *Planner) GenerateChanges(prompt string, intent *Intent, files []string)
 		fileContext = fmt.Sprintf("%s\n%s\n-----------\n%s", fileContext, filename, fileContent)
 	}
 
-	result, err := p.llm.Complete(prompts.ImplementFeature, prompt, fileContext, fmt.Sprintf("Requires new files: %b", intent.RequiresNewFiles))
+	result, err := p.llm.Complete(prompts.ImplementFeature, prompt, fileContext, fmt.Sprintf("Requires new files: %t", intent.RequiresNewFiles))
 
 	if err != nil {
 		return "", err

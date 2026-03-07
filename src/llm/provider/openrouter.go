@@ -28,7 +28,7 @@ const (
 	LLAMA_3_3_70B_INSTRUCT OpenRouterModel = "meta-llama/llama-3.3-70b-instruct"
 )
 
-func NewOpenRouterProvider() LLMProvider {
+func NewOpenRouterProvider() *OpenRouterProvider {
 	return &OpenRouterProvider{
 		Model: MINIMAX_M2_5,
 	}
@@ -165,20 +165,40 @@ func (p *OpenRouterProvider) SetModel(model OpenRouterModel, nitro bool) {
 	p.Model = model
 }
 
-func (p *OpenRouterProvider) Complete(systemPrompt string, userPrompt ...string) (string, error) {
+type ConversationMessage struct {
+	Role    string
+	Content string
+}
 
+type Conversation struct {
+	Messages []ConversationMessage
+}
+
+func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
+	r.SetModel(LLAMA_3_3_70B_INSTRUCT, true)
+	value, err := r.Complete(prev)
+
+	if err != nil {
+		return nil, err
+	}
+
+	prev.Messages = append(prev.Messages, ConversationMessage{Content: value, Role: "assistant"})
+
+	return prev, nil
+}
+
+func (p *OpenRouterProvider) Complete(conversation *Conversation) (string, error) {
 	fmt.Println("Running OpenRouter api call with: ", p.Model)
 
 	err := godotenv.Load()
-
 	if err != nil {
 		fmt.Println("Failed to load env file")
 	}
 
-	prompts := []ChatMessage{{Content: systemPrompt, Role: "system"}}
+	var prompts []ChatMessage
 
-	for _, prompt := range userPrompt {
-		prompts = append(prompts, ChatMessage{Content: prompt, Role: "user"})
+	for _, message := range conversation.Messages {
+		prompts = append(prompts, ChatMessage{Content: message.Content, Role: message.Role})
 	}
 
 	requestBody := OpenRouterRequest{

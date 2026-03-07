@@ -545,7 +545,7 @@ func main() {
 
 	workspace := workspace.Load("/Users/anirban/Documents/Code/zoom-sync-flow")
 	runtime := agent.NewRuntime(&workspace)
-	err := runtime.Run("In the Home page, add dynamic greeting instead of a hardcoded greeting")
+	err := runtime.Run("Read the Home.tsx and Billing.tsx files and write their documentations in files Home.md and Billing.md in the same location")
 
 	if err != nil {
 		panic(err)

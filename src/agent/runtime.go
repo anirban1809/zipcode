@@ -1,6 +1,10 @@
 package agent
 
 import (
+	"encoding/json"
+	"fmt"
+	"zipcode/src/llm/prompts"
+	llm "zipcode/src/llm/provider"
 	"zipcode/src/workspace"
 )
 
@@ -18,53 +22,98 @@ const (
 
 type Runtime struct {
 	Prompt    string
-	Planner   Planner
 	Executor  Executor
 	Status    RuntimeStatus
+	LLM       *llm.OpenRouterProvider
 	Workspace *workspace.Workspace
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
 	return Runtime{
 		Status:    Idle,
-		Planner:   NewPlanner(workspace),
+		LLM:       llm.NewOpenRouterProvider(),
 		Workspace: workspace,
 	}
+}
+
+/*
+{
+  "type": "task",
+  "data": {
+    "objective": "<user task description>",
+    "workspace": "<workspace path>",
+    "context": "<optional context>"
+  }
+}
+*/
+
+type TaskRequest struct {
+	Type string          `json:"type"`
+	Data TaskRequestData `json:"data"`
+}
+
+type TaskRequestData struct {
+	Objective string `json:"objective"`
+	Workspace string `json:"workspace,omitempty"`
+	Context   string `json:"context,omitempty"`
 }
 
 func (r Runtime) Run(prompt string) error {
 	r.Status = Running
 	r.Prompt = prompt
 
-	// for r.Status != Idle {
-	// 	response, err := r.Planner.StartConversation()
+	taskRequest := TaskRequest{
+		Type: "task",
+		Data: TaskRequestData{
+			Objective: prompt,
+			Workspace: r.Workspace.RootPath,
+		},
+	}
 
-	// 	if err != nil {
-	// 		return err
-	// 	}
+	taskRequestString, err := json.Marshal(taskRequest)
 
-	// 	next, err := r.Executor.ProcessResponse(response)
-	// }
+	if err != nil {
+		return err
+	}
 
-	r.Planner.StartConversation()
+	initialConversation := llm.Conversation{
+		Messages: []llm.ConversationMessage{
+			{
+				Content: prompts.MainSystemPrompt,
+				Role:    "system",
+			},
+			{
+				Content: string(taskRequestString),
+				Role:    "user",
+			},
+		},
+	}
 
-	// projectType, err := r.Planner.ClassifyProjectType()
+	conv, err := r.LLM.Chat(&initialConversation)
 
-	// if err != nil {
-	// 	return err
-	// }
+	if err != nil {
+		return err
+	}
 
-	// intent, err := r.Planner.ClassifyIntent(prompt, projectType)
+	for r.Status != Idle {
+		lastResponseIndex := len(conv.Messages) - 1
+		lastResponse := conv.Messages[lastResponseIndex].Content
+		next, status, err := r.Executor.ProcessResponse(lastResponse)
 
-	// if err != nil {
-	// 	return err
-	// }
+		fmt.Println(next)
 
-	// files, err := r.Planner.ResolveScope(intent.SearchIdentifiers)
+		if err != nil {
+			return err
+		}
 
-	// r.Planner.GenerateChanges(prompt, intent, files[0:3])
+		if status == ExecutionCompleted {
+			r.Status = Idle
+			break
+		}
 
-	// //execution completed, status returns to idle
-	// r.Status = Idle
+		conv.Messages = append(conv.Messages, llm.ConversationMessage{Role: "user", Content: next})
+		conv, err = r.LLM.Chat(conv)
+	}
+
 	return nil
 }

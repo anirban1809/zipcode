@@ -1,6 +1,10 @@
 package agent
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+	"zipcode/src/tools"
+)
 
 type Executor struct{}
 
@@ -13,23 +17,222 @@ const (
 	ExecutionCompleted
 )
 
-type ExecutionOutput interface {
-	string | int
+type RequestType string
+
+const (
+	RequestTask       RequestType = "task"
+	RequestToolResult RequestType = "tool_result"
+	RequestMessage    RequestType = "message"
+)
+
+// Root request envelope
+type Request struct {
+	Type RequestType `json:"type"`
+	Data any         `json:"data"`
 }
 
 type ResponseType string
 
 const (
-	TYPE_TOOL_CALL ResponseType = "tool_call"
-	TYPE_MESSAGE   ResponseType = "message"
-	TYPE_FINISH    ResponseType = "finish"
+	ResponseToolCall ResponseType = "tool_call"
+	ResponseMessage  ResponseType = "message"
+	ResponseFinish   ResponseType = "finish"
 )
 
-type LLMResponse struct {
+// ----------------------------
+// TOOL RESULT REQUEST
+// ----------------------------
+
+type ToolResultRequestData struct {
+	ToolName string `json:"tool_name"`
+	Result   any    `json:"result"`
+}
+
+// ----------------------------
+// MESSAGE REQUEST
+// ----------------------------
+
+type MessageRequestData struct {
+	Message string `json:"message"`
+}
+
+// ============================
+// RESPONSE TYPES
+// ============================
+
+// Root response envelope
+type Response struct {
 	Type ResponseType    `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
 
-func (e *Executor) ProcessResponse(response LLMResponse) (any, ExecutionResultStatus, error) {
-	return nil, 0, nil
+// ----------------------------
+// TOOL CALL RESPONSE
+// ----------------------------
+
+type ToolCallResponseData struct {
+	ToolName  string          `json:"tool_name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+// ----------------------------
+// MESSAGE RESPONSE
+// ----------------------------
+
+type MessageResponseData struct {
+	Message string `json:"message"`
+}
+
+// ----------------------------
+// FINISH RESPONSE
+// ----------------------------
+
+type FinishResponseData struct {
+	Message string `json:"message"`
+}
+
+type ToolResultData struct {
+	ToolName string          `json:"tool_name"`
+	Result   json.RawMessage `json:"result"`
+}
+
+type ToolInputData struct {
+	ToolName string `json:"tool_name"`
+}
+
+func (e *Executor) ProcessResponse(response string) (string, ExecutionResultStatus, error) {
+	var llmResponse Response
+
+	err := json.Unmarshal([]byte(response), &llmResponse)
+
+	if err != nil {
+		return "", ExecutionFailed, err
+	}
+
+	switch llmResponse.Type {
+	case ResponseToolCall:
+		var tool ToolCallResponseData
+		json.Unmarshal(llmResponse.Data, &tool)
+		request, err := e.ProcessToolCall(tool)
+
+		if err != nil {
+			return "", ExecutionFailed, err
+		}
+		requestJson, err := json.Marshal(request)
+		return string(requestJson), ExecutionSucceeded, nil
+
+	case ResponseFinish:
+		var response FinishResponseData
+		err := json.Unmarshal(llmResponse.Data, &response)
+
+		if err != nil {
+			return "", ExecutionFailed, err
+		}
+
+		return response.Message, ExecutionCompleted, nil
+
+	case ResponseMessage:
+		var response MessageResponseData
+
+		err := json.Unmarshal(llmResponse.Data, &response)
+
+		if err != nil {
+			return "", ExecutionFailed, err
+		}
+
+		return response.Message, ExecutionSucceeded, nil
+	}
+
+	return "", ExecutionFailed, errors.New("invalid response type")
+}
+
+func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultRequestData, error) {
+
+	switch input.ToolName {
+	case "bash":
+		var bashInput tools.BashInput
+		err := json.Unmarshal(input.Arguments, &bashInput)
+		if err != nil {
+			return nil, err
+		}
+		output, err := tools.RunBash(bashInput)
+		return &ToolResultRequestData{
+			ToolName: "bash",
+			Result:   output,
+		}, nil
+
+	case "code_search":
+		var codeSearchInput tools.CodeSearchInput
+
+		err := json.Unmarshal(input.Arguments, &codeSearchInput)
+		if err != nil {
+			return nil, err
+		}
+
+		output, err := tools.RunCodeSearch(codeSearchInput)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &ToolResultRequestData{
+			ToolName: "code_search",
+			Result:   output,
+		}, nil
+
+	case "file_search":
+		var fileSearchInput tools.FileSearchInput
+		err := json.Unmarshal(input.Arguments, &fileSearchInput)
+		if err != nil {
+			return nil, err
+		}
+
+		output, err := tools.RunFileSearch(fileSearchInput)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &ToolResultRequestData{
+			ToolName: "file_search",
+			Result:   output,
+		}, nil
+
+	case "file_read":
+		var fileReadInput tools.FileReadInput
+		err := json.Unmarshal(input.Arguments, &fileReadInput)
+		if err != nil {
+			return nil, err
+		}
+
+		output, err := tools.RunFileRead(fileReadInput)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &ToolResultRequestData{
+			ToolName: "file_read",
+			Result:   output,
+		}, nil
+
+	case "file_write":
+		var fileWriteInput tools.FileWriteInput
+		err := json.Unmarshal(input.Arguments, &fileWriteInput)
+		if err != nil {
+			return nil, err
+		}
+
+		output, err := tools.RunFileWrite(fileWriteInput)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &ToolResultRequestData{
+			ToolName: "file_write",
+			Result:   output,
+		}, nil
+	}
+	return nil, errors.New("invalid tool name")
 }

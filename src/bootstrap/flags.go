@@ -5,7 +5,7 @@ import llm "zipcode/src/llm/provider"
 type StartupIntent struct {
 	Workspace   string
 	Prompt      string
-	LLMProvider llm.LLMProvider
+	LLMProvider llm.OpenRouterProvider
 	Config      string
 	Debug       bool
 }

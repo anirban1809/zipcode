@@ -1,13 +1,13 @@
 package llm
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
-	"strings"
+	"zipcode/src/tools"
 
 	"github.com/joho/godotenv"
 )
@@ -15,6 +15,7 @@ import (
 type OpenRouterProvider struct {
 	ProviderId string
 	Model      OpenRouterModel
+	Tools      []tools.Tool
 }
 
 type OpenRouterModel string
@@ -26,11 +27,19 @@ const (
 	GPT_5_1_CODEX_MINI     OpenRouterModel = "openai/gpt-5.1-codex-mini"
 	KIMI_K_2_5             OpenRouterModel = "moonshotai/kimi-k2.5"
 	LLAMA_3_3_70B_INSTRUCT OpenRouterModel = "meta-llama/llama-3.3-70b-instruct"
+	GLM_4_7                OpenRouterModel = "z-ai/glm-4.7"
 )
 
 func NewOpenRouterProvider() *OpenRouterProvider {
 	return &OpenRouterProvider{
 		Model: MINIMAX_M2_5,
+		Tools: []tools.Tool{
+			tools.BashTool,
+			tools.CodeSearchTool,
+			tools.FileReadTool,
+			tools.FileSearchTool,
+			tools.FileWriteTool,
+		},
 	}
 }
 
@@ -38,7 +47,7 @@ type OpenRouterRequest struct {
 	Model               OpenRouterModel        `json:"model,omitempty"`
 	Messages            []ChatMessage          `json:"messages"`
 	Provider            *ProviderConfig        `json:"provider,omitempty"`
-	Temperature         *float64               `json:"temperature,omitempty"`
+	Temperature         float64                `json:"temperature,omitempty"`
 	TopP                *float64               `json:"top_p,omitempty"`
 	FrequencyPenalty    *float64               `json:"frequency_penalty,omitempty"`
 	PresencePenalty     *float64               `json:"presence_penalty,omitempty"`
@@ -51,7 +60,7 @@ type OpenRouterRequest struct {
 	Modalities          []string               `json:"modalities,omitempty"`
 	Plugins             []PluginConfig         `json:"plugins,omitempty"`
 	ToolChoice          interface{}            `json:"tool_choice,omitempty"`
-	Tools               []ToolDefinition       `json:"tools,omitempty"`
+	Tools               []tools.Tool           `json:"tools,omitempty"`
 	Extra               map[string]interface{} `json:"extra,omitempty"` // forward compatibility
 }
 
@@ -110,12 +119,12 @@ type ReasoningDetails struct {
 	Type   string `json:"type"`
 	Text   string `json:"text"`
 }
+
 type Message struct {
-	Role             string             `json:"role"`
-	Content          string             `json:"content"`
-	Refusal          any                `json:"refusal"`
-	Reasoning        string             `json:"reasoning"`
-	ReasoningDetails []ReasoningDetails `json:"reasoning_details"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls"`
+	ToolCallId string     `json:"tool_call_id,omitempty"`
 }
 
 type Choices struct {
@@ -128,9 +137,22 @@ type Choices struct {
 }
 
 type MessageDelta struct {
-	Content   string `json:"content"`
-	Role      string `json:"role"`
-	Reasoning string `json:"reasoning"`
+	Content   string     `json:"content"`
+	Role      string     `json:"role"`
+	Reasoning string     `json:"reasoning"`
+	ToolCalls []ToolCall `json:"tool_calls"`
+}
+
+type ToolCall struct {
+	Type     string           `json:"type"`
+	Index    int              `json:"index"`
+	ID       string           `json:"id"`
+	Function ToolCallFunction `json:"function"`
+}
+
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 type PromptTokensDetails struct {
@@ -165,29 +187,25 @@ func (p *OpenRouterProvider) SetModel(model OpenRouterModel, nitro bool) {
 	p.Model = model
 }
 
-type ConversationMessage struct {
-	Role    string
-	Content string
-}
-
 type Conversation struct {
-	Messages []ConversationMessage
+	Tools    []tools.Tool
+	Messages []Message
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(LLAMA_3_3_70B_INSTRUCT, true)
+	r.SetModel(GPT_5_1_CODEX_MINI, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {
 		return nil, err
 	}
 
-	prev.Messages = append(prev.Messages, ConversationMessage{Content: value, Role: "assistant"})
+	prev.Messages = append(prev.Messages, value.Choices[0].Message)
 
 	return prev, nil
 }
 
-func (p *OpenRouterProvider) Complete(conversation *Conversation) (string, error) {
+func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterResponse, error) {
 	fmt.Println("Running OpenRouter api call with: ", p.Model)
 
 	err := godotenv.Load()
@@ -204,15 +222,18 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (string, error
 	requestBody := OpenRouterRequest{
 		Model:    p.Model,
 		Messages: prompts,
-		Stream:   true,
+		Stream:   false,
+		Tools:    p.Tools,
 	}
 
 	value, err := json.Marshal(requestBody)
 
+	fmt.Println(string(value))
+
 	req, err := http.NewRequest(http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(value))
 
 	if err != nil {
-		return "", err
+		return OpenRouterResponse{}, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -221,58 +242,22 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (string, error
 
 	res, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return OpenRouterResponse{}, err
 	}
 
 	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
 
-	reader := bufio.NewReader(res.Body)
-
-	finalOutput := ""
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			break
-		}
-
-		line = strings.TrimSpace(line)
-
-		if line == "" {
-			continue
-		}
-
-		if strings.HasPrefix(line, "data: ") {
-			payload := strings.TrimPrefix(line, "data: ")
-
-			if payload == "[DONE]" {
-				break
-			}
-
-			var ir OpenRouterResponse
-
-			err := json.Unmarshal([]byte(payload), &ir)
-
-			if err != nil {
-				return "", err
-			}
-
-			//break out once we reach end of the response
-			if len(ir.Choices) == 0 {
-				break
-			}
-
-			if ir.Choices[0].Delta.Content != "" {
-				finalOutput = fmt.Sprintf("%s%s", finalOutput, ir.Choices[0].Delta.Content)
-				// fmt.Print(ir.Choices[0].Delta.Content)
-			} else {
-				// fmt.Print(ir.Choices[0].Delta.Reasoning)
-			}
-
-		}
+	if err != nil {
+		return OpenRouterResponse{}, err
 	}
 
-	fmt.Println(finalOutput)
+	var finalResponse OpenRouterResponse
+	err = json.Unmarshal(body, &finalResponse)
 
-	return finalOutput, nil
+	if err != nil {
+		return OpenRouterResponse{}, err
+	}
+
+	return finalResponse, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
+	"zipcode/src/tools"
 	"zipcode/src/workspace"
 )
 
@@ -26,6 +27,7 @@ type Runtime struct {
 	Status    RuntimeStatus
 	LLM       *llm.OpenRouterProvider
 	Workspace *workspace.Workspace
+	Tools     []tools.Tool
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
@@ -77,7 +79,7 @@ func (r Runtime) Run(prompt string) error {
 	}
 
 	initialConversation := llm.Conversation{
-		Messages: []llm.ConversationMessage{
+		Messages: []llm.Message{
 			{
 				Content: prompts.MainSystemPrompt,
 				Role:    "system",
@@ -86,6 +88,13 @@ func (r Runtime) Run(prompt string) error {
 				Content: string(taskRequestString),
 				Role:    "user",
 			},
+		},
+		Tools: []tools.Tool{
+			tools.BashTool,
+			tools.CodeSearchTool,
+			tools.FileReadTool,
+			tools.FileSearchTool,
+			tools.FileWriteTool,
 		},
 	}
 
@@ -97,7 +106,7 @@ func (r Runtime) Run(prompt string) error {
 
 	for r.Status != Idle {
 		lastResponseIndex := len(conv.Messages) - 1
-		lastResponse := conv.Messages[lastResponseIndex].Content
+		lastResponse := conv.Messages[lastResponseIndex]
 		next, status, err := r.Executor.ProcessResponse(lastResponse)
 
 		fmt.Println(next)
@@ -111,7 +120,14 @@ func (r Runtime) Run(prompt string) error {
 			break
 		}
 
-		conv.Messages = append(conv.Messages, llm.ConversationMessage{Role: "user", Content: next})
+		var message llm.Message
+		err = json.Unmarshal([]byte(next), &message)
+
+		if err != nil {
+			return err
+		}
+
+		conv.Messages = append(conv.Messages, message)
 		conv, err = r.LLM.Chat(conv)
 	}
 

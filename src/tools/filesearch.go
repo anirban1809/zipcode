@@ -7,6 +7,35 @@ import (
 	"os/exec"
 )
 
+var FileSearchTool = Tool{
+	Type: "function",
+	Function: ToolFunction{
+		Name:        "file_search",
+		Description: "Search for files within the workspace by name or pattern. Useful for locating files before inspecting them. Do not use overly broad patterns like * or *.* for file search. Be as specific as possible.",
+		Parameters: JSONSchema{
+			Type: "object",
+			Properties: map[string]Schema{
+				"message": {
+					Type:        "string",
+					Description: "Explanation of why the file search is needed",
+				},
+				"query": {
+					Type:        "string",
+					Description: "File name or pattern to search for",
+				},
+				"path": {
+					Type:        "string",
+					Description: "Optional directory path where the search should start",
+				},
+			},
+			Required: []string{
+				"message",
+				"query",
+			},
+		},
+	},
+}
+
 type FileSearchInput struct {
 	Query string `json:"query"`
 	Path  string `json:"path"`

@@ -7,6 +7,37 @@ import (
 	"time"
 )
 
+var BashTool = Tool{
+	Type: "function",
+	Function: ToolFunction{
+		Name: "bash_tool",
+		Description: `Execute shell commands in the workspace environment.  
+Used for inspecting the filesystem, building projects, running tests, or executing scripts.`,
+		Parameters: JSONSchema{
+			Type: "object",
+			Properties: map[string]Schema{
+				"message": {
+					Type:        "string",
+					Description: "A message describing the command being executed by the llm",
+				},
+				"command": {
+					Type:        "string",
+					Description: "the command to be executed",
+				},
+				"working_directory": {
+					Type:        "string",
+					Description: "The current working directory",
+				},
+				"timeout_seconds": {
+					Description: "seconds after which the command will be terminated automatically",
+					Type:        "integer",
+				},
+			},
+			Required: []string{"message", "command"},
+		},
+	},
+}
+
 // ============================
 // BASH TOOL
 // ============================

@@ -8,6 +8,34 @@ import (
 	"strings"
 )
 
+type Tool struct {
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
+}
+
+type ToolFunction struct {
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Parameters  JSONSchema `json:"parameters"`
+}
+
+type JSONSchema struct {
+	Type        string            `json:"type,omitempty"`
+	Properties  map[string]Schema `json:"properties,omitempty"`
+	Required    []string          `json:"required,omitempty"`
+	Items       *Schema           `json:"items,omitempty"`
+	Description string            `json:"description,omitempty"`
+}
+
+type Schema struct {
+	Type        string            `json:"type,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Properties  map[string]Schema `json:"properties,omitempty"`
+	Items       *Schema           `json:"items,omitempty"`
+	Required    []string          `json:"required,omitempty"`
+	Enum        []interface{}     `json:"enum,omitempty"`
+}
+
 type grepEvent struct {
 	Type string     `json:"type"`
 	Data grepOutput `json:"data"`

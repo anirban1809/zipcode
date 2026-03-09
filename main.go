@@ -543,9 +543,9 @@ func main() {
 	// 	fmt.Print("\033[H\033[2J\033[3J") /* clear the screen */
 	// }
 
-	workspace := workspace.Load("/Users/anirban/Documents/Code/zoom-sync-flow")
+	workspace := workspace.Load("/Users/anirban/Documents/Code/ln-api")
 	runtime := agent.NewRuntime(&workspace)
-	err := runtime.Run("Read the Home.tsx and Billing.tsx files and write their documentations in files Home.md and Billing.md in the same location")
+	err := runtime.Run("Refactor repeated workspace/user extraction logic in src/calendars.ts and src/admin.ts into a shared utility")
 
 	if err != nil {
 		panic(err)

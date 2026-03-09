@@ -45,7 +45,7 @@ func NewOpenRouterProvider() *OpenRouterProvider {
 
 type OpenRouterRequest struct {
 	Model               OpenRouterModel        `json:"model,omitempty"`
-	Messages            []ChatMessage          `json:"messages"`
+	Messages            []Message              `json:"messages"`
 	Provider            *ProviderConfig        `json:"provider,omitempty"`
 	Temperature         float64                `json:"temperature,omitempty"`
 	TopP                *float64               `json:"top_p,omitempty"`
@@ -221,14 +221,14 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 
 	requestBody := OpenRouterRequest{
 		Model:    p.Model,
-		Messages: prompts,
+		Messages: conversation.Messages,
 		Stream:   false,
 		Tools:    p.Tools,
 	}
 
 	value, err := json.Marshal(requestBody)
 
-	fmt.Println(string(value))
+	// fmt.Println(string(value))
 
 	req, err := http.NewRequest(http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(value))
 

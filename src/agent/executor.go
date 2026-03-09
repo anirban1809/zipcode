@@ -5,6 +5,7 @@ import (
 	"errors"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
+	"zipcode/src/utils"
 )
 
 type Executor struct{}
@@ -134,6 +135,8 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 
 	// 	return response.Message, ExecutionSucceeded, nil
 	// }
+
+	utils.PrintStruct(response)
 
 	if response.Content == "" && len(response.ToolCalls) > 0 {
 		tool := ToolCallResponseData{

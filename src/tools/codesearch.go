@@ -35,8 +35,9 @@ var CodeSearchTool = Tool{
 }
 
 type CodeSearchInput struct {
-	Query string `json:"query"`
-	Path  string `json:"path"`
+	Query   string `json:"query"`
+	Path    string `json:"path"`
+	Message string `json:"message"`
 }
 
 type CodeSearchOutput struct {

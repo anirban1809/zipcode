@@ -3,12 +3,14 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
-	"zipcode/src/utils"
 )
 
-type Executor struct{}
+type Executor struct {
+}
 
 type ExecutionResultStatus int
 
@@ -105,38 +107,11 @@ type ToolInputData struct {
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResultStatus, error) {
-	// switch llmResponse.Type {
-	// case ResponseToolCall:
-	// 	var tool ToolCallResponseData
-	// 	json.Unmarshal(llmResponse.Data, &tool)
-	// 	request, err := e.ProcessToolCall(tool)
-	// 	if err != nil {
-	// 		return "", ExecutionFailed, err
-	// 	}
+	// utils.PrintStruct(response)
 
-	// 	requestJson, err := json.Marshal(request)
-	// 	return string(requestJson), ExecutionSucceeded, nil
-
-	// case ResponseFinish:
-	// 	var response FinishResponseData
-	// 	err := json.Unmarshal(llmResponse.Data, &response)
-	// 	if err != nil {
-	// 		return "", ExecutionFailed, err
-	// 	}
-
-	// 	return response.Message, ExecutionCompleted, nil
-
-	// case ResponseMessage:
-	// 	var response MessageResponseData
-	// 	err := json.Unmarshal(llmResponse.Data, &response)
-	// 	if err != nil {
-	// 		return "", ExecutionFailed, err
-	// 	}
-
-	// 	return response.Message, ExecutionSucceeded, nil
-	// }
-
-	utils.PrintStruct(response)
+	if response.ToolCalls == nil && strings.Contains(response.Content, "finish") {
+		return response.Content, ExecutionCompleted, nil
+	}
 
 	if response.Content == "" && len(response.ToolCalls) > 0 {
 		tool := ToolCallResponseData{
@@ -161,6 +136,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 	case "bash_tool":
 		var bashInput tools.BashInput
 		err := json.Unmarshal(input.Arguments, &bashInput)
+		fmt.Println(bashInput.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -175,8 +151,9 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 
 	case "code_search":
 		var codeSearchInput tools.CodeSearchInput
-
 		err := json.Unmarshal(input.Arguments, &codeSearchInput)
+		fmt.Println(codeSearchInput.Message)
+
 		if err != nil {
 			return nil, err
 		}
@@ -198,6 +175,9 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 	case "file_search":
 		var fileSearchInput tools.FileSearchInput
 		err := json.Unmarshal(input.Arguments, &fileSearchInput)
+
+		fmt.Println(fileSearchInput.Message)
+
 		if err != nil {
 			return nil, err
 		}
@@ -219,6 +199,9 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 	case "file_read":
 		var fileReadInput tools.FileReadInput
 		err := json.Unmarshal(input.Arguments, &fileReadInput)
+
+		fmt.Println(fileReadInput.Message)
+
 		if err != nil {
 			return nil, err
 		}
@@ -243,6 +226,8 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		if err != nil {
 			return nil, err
 		}
+
+		fmt.Println(fileWriteInput.Message)
 
 		output, err := tools.RunFileWrite(fileWriteInput)
 

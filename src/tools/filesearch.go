@@ -37,8 +37,9 @@ var FileSearchTool = Tool{
 }
 
 type FileSearchInput struct {
-	Query string `json:"query"`
-	Path  string `json:"path"`
+	Query   string `json:"query"`
+	Path    string `json:"path"`
+	Message string `json:"message"`
 }
 
 type FileSearchOutput struct {
@@ -57,8 +58,6 @@ func RunFileSearch(input FileSearchInput) (FileSearchOutput, error) {
 	}
 
 	cmd := exec.Command("bash", "-c", fmt.Sprintf("rg --files | rg %s", input.Query))
-
-	fmt.Println(fmt.Sprintf("rg --files | rg %s --json", input.Query))
 
 	if input.Path != "" {
 		cmd.Dir = input.Path

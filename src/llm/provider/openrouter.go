@@ -28,6 +28,8 @@ const (
 	KIMI_K_2_5             OpenRouterModel = "moonshotai/kimi-k2.5"
 	LLAMA_3_3_70B_INSTRUCT OpenRouterModel = "meta-llama/llama-3.3-70b-instruct"
 	GLM_4_7                OpenRouterModel = "z-ai/glm-4.7"
+	QWEN_3_CODER_FLASH     OpenRouterModel = "qwen/qwen3-coder-flash"
+	GPT_5_NANO             OpenRouterModel = "openai/gpt-5-nano"
 )
 
 func NewOpenRouterProvider() *OpenRouterProvider {
@@ -206,7 +208,7 @@ func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
 }
 
 func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterResponse, error) {
-	fmt.Println("Running OpenRouter api call with: ", p.Model)
+	// fmt.Println("Running OpenRouter api call with: ", p.Model)
 
 	err := godotenv.Load()
 	if err != nil {

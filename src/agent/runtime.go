@@ -2,17 +2,13 @@ package agent
 
 import (
 	"encoding/json"
-	"fmt"
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
 	"zipcode/src/workspace"
 )
 
-// remove once all types are implemented
-type NotImplemented struct{}
-
-// represents the current status of the runtime
+// Represents the current status of the runtime
 type RuntimeStatus int
 
 const (
@@ -37,17 +33,6 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 		Workspace: workspace,
 	}
 }
-
-/*
-{
-  "type": "task",
-  "data": {
-    "objective": "<user task description>",
-    "workspace": "<workspace path>",
-    "context": "<optional context>"
-  }
-}
-*/
 
 type TaskRequest struct {
 	Type string          `json:"type"`
@@ -109,7 +94,7 @@ func (r Runtime) Run(prompt string) error {
 		lastResponse := conv.Messages[lastResponseIndex]
 		next, status, err := r.Executor.ProcessResponse(lastResponse)
 
-		fmt.Println(next)
+		// fmt.Println(next)
 
 		if err != nil {
 			return err

@@ -31,7 +31,8 @@ var FileReadTool = Tool{
 }
 
 type FileReadInput struct {
-	Path string `json:"path"`
+	Path    string `json:"path"`
+	Message string `json:"message"`
 }
 
 type FileReadOutput struct {

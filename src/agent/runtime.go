@@ -17,6 +17,8 @@ const (
 	Cancelled
 )
 
+type RuntimeEvent string
+
 type Runtime struct {
 	Prompt    string
 	Executor  Executor
@@ -31,6 +33,7 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 		Status:    Idle,
 		LLM:       llm.NewOpenRouterProvider(),
 		Workspace: workspace,
+		Executor:  NewExecutor(),
 	}
 }
 
@@ -45,7 +48,12 @@ type TaskRequestData struct {
 	Context   string `json:"context,omitempty"`
 }
 
+func (r Runtime) GetExecutorEvents() chan string {
+	return r.Executor.Events
+}
+
 func (r Runtime) Run(prompt string) error {
+
 	r.Status = Running
 	r.Prompt = prompt
 

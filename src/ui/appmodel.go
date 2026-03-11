@@ -38,6 +38,12 @@ func (a AppModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
+func waitForRuntimeEvent(ch <-chan string) tea.Cmd {
+	return func() tea.Msg {
+		return <-ch
+	}
+}
+
 func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -48,14 +54,16 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 
 		case "enter":
-			err := a.Runtime.Run(a.Prompt.Value())
-			a.Prompt.SetValue("")
-
-			if err != nil {
-				panic(err)
+			if a.Prompt.Value() != "" {
+				go a.Runtime.Run(a.Prompt.Value())
+				a.Prompt.SetValue("")
+				return a, waitForRuntimeEvent(a.Runtime.GetExecutorEvents())
 			}
 		}
 
+	case string:
+		a.Result += msg + "\n"
+		return a, waitForRuntimeEvent(a.Runtime.GetExecutorEvents())
 	}
 
 	a.Prompt, cmd = a.Prompt.Update(msg)
@@ -65,7 +73,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a AppModel) View() string {
 	banner := "ZipCode v0.0.1"
 	v := lipgloss.NewStyle().Render(a.Prompt.View())
-	return fmt.Sprintf("%s\n%s", banner, v)
+	return fmt.Sprintf("%s\n%s\n%s", banner, v, a.Result)
 }
 
 func ClearScreen() {

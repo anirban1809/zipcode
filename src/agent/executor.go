@@ -3,13 +3,19 @@ package agent
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
 )
 
 type Executor struct {
+	Events chan string
+}
+
+func NewExecutor() Executor {
+	return Executor{
+		Events: make(chan string),
+	}
 }
 
 type ExecutionResultStatus int
@@ -28,12 +34,6 @@ const (
 	RequestToolResult RequestType = "tool_result"
 	RequestMessage    RequestType = "message"
 )
-
-// Root request envelope
-type Request struct {
-	Type RequestType `json:"type"`
-	Data any         `json:"data"`
-}
 
 type ResponseType string
 
@@ -54,24 +54,6 @@ type ToolResultRequestData struct {
 }
 
 // ----------------------------
-// MESSAGE REQUEST
-// ----------------------------
-
-type MessageRequestData struct {
-	Message string `json:"message"`
-}
-
-// ============================
-// RESPONSE TYPES
-// ============================
-
-// Root response envelope
-type Response struct {
-	Type ResponseType    `json:"type"`
-	Data json.RawMessage `json:"data"`
-}
-
-// ----------------------------
 // TOOL CALL RESPONSE
 // ----------------------------
 
@@ -79,31 +61,6 @@ type ToolCallResponseData struct {
 	Id        string          `json:"id"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
-}
-
-// ----------------------------
-// MESSAGE RESPONSE
-// ----------------------------
-
-type MessageResponseData struct {
-	Message string `json:"message"`
-}
-
-// ----------------------------
-// FINISH RESPONSE
-// ----------------------------
-
-type FinishResponseData struct {
-	Message string `json:"message"`
-}
-
-type ToolResultData struct {
-	ToolName string          `json:"tool_name"`
-	Result   json.RawMessage `json:"result"`
-}
-
-type ToolInputData struct {
-	ToolName string `json:"tool_name"`
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResultStatus, error) {
@@ -136,7 +93,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 	case "bash_tool":
 		var bashInput tools.BashInput
 		err := json.Unmarshal(input.Arguments, &bashInput)
-		fmt.Println(bashInput.Message)
+		e.Events <- (bashInput.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +109,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 	case "code_search":
 		var codeSearchInput tools.CodeSearchInput
 		err := json.Unmarshal(input.Arguments, &codeSearchInput)
-		fmt.Println(codeSearchInput.Message)
+		e.Events <- (codeSearchInput.Message)
 
 		if err != nil {
 			return nil, err
@@ -176,7 +133,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		var fileSearchInput tools.FileSearchInput
 		err := json.Unmarshal(input.Arguments, &fileSearchInput)
 
-		fmt.Println(fileSearchInput.Message)
+		e.Events <- (fileSearchInput.Message)
 
 		if err != nil {
 			return nil, err
@@ -200,7 +157,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		var fileReadInput tools.FileReadInput
 		err := json.Unmarshal(input.Arguments, &fileReadInput)
 
-		fmt.Println(fileReadInput.Message)
+		e.Events <- (fileReadInput.Message)
 
 		if err != nil {
 			return nil, err
@@ -227,7 +184,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			return nil, err
 		}
 
-		fmt.Println(fileWriteInput.Message)
+		e.Events <- fileWriteInput.Message
 
 		output, err := tools.RunFileWrite(fileWriteInput)
 

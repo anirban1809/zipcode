@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
@@ -102,7 +103,7 @@ func (r Runtime) Run(prompt string) error {
 		lastResponse := conv.Messages[lastResponseIndex]
 		next, status, err := r.Executor.ProcessResponse(lastResponse)
 
-		// fmt.Println(next)
+		fmt.Println(next)
 
 		if err != nil {
 			return err

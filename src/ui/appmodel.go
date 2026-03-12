@@ -6,6 +6,7 @@ import (
 	"zipcode/src/workspace"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -14,6 +15,7 @@ type AppModel struct {
 	Workspace *workspace.Workspace
 	Runtime   *agent.Runtime
 	Prompt    textinput.Model
+	ViewPort  viewport.Model
 	Result    string
 }
 
@@ -23,6 +25,8 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 	input.Focus()
 	input.CharLimit = 256
 	input.Width = 256
+	vp := viewport.New(200, 20)
+	vp.SetContent(``)
 
 	runtime := agent.NewRuntime(workspace)
 
@@ -31,6 +35,7 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 		Runtime:   &runtime,
 		Prompt:    input,
 		Result:    "",
+		ViewPort:  vp,
 	}
 }
 
@@ -63,17 +68,25 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case string:
 		a.Result += msg + "\n"
+		a.ViewPort.SetContent(lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Render(a.Result))
 		return a, waitForRuntimeEvent(a.Runtime.GetExecutorEvents())
 	}
 
 	a.Prompt, cmd = a.Prompt.Update(msg)
+	a.ViewPort, cmd = a.ViewPort.Update(msg)
 	return a, cmd
 }
 
 func (a AppModel) View() string {
-	banner := "ZipCode v0.0.1"
-	v := lipgloss.NewStyle().Render(a.Prompt.View())
-	return fmt.Sprintf("%s\n%s\n%s", banner, v, a.Result)
+	banner := lipgloss.NewStyle().Width(200).
+		Border(lipgloss.NormalBorder()).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderTop(false).
+		Render(fmt.Sprintf("ZipCode v0.0.1\nCurrent Workspace: %s\n", a.Workspace.RootPath))
+	promptView := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderLeft(false).BorderRight(false).Render(a.Prompt.View())
+	viewPortView := lipgloss.NewStyle().Render(a.ViewPort.View())
+	return fmt.Sprintf("\n%s\n%s\n%s", banner, viewPortView, promptView)
 }
 
 func ClearScreen() {

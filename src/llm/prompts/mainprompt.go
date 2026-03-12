@@ -89,6 +89,8 @@ MESSAGE RESPONSE
 FINISH RESPONSE
 ------------------------------------------------
 
+NOTE: Finish is just a message type to describe the end of the conversation. It is NOT a tool call.
+
 {
   "type": "finish",
   "data": {

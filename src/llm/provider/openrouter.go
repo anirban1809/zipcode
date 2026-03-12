@@ -195,7 +195,7 @@ type Conversation struct {
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(GPT_5_1_CODEX_MINI, true)
+	r.SetModel(MINIMAX_M2_5, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {

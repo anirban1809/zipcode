@@ -51,6 +51,9 @@ func RunCodeSearch(input CodeSearchInput) (CodeSearchOutput, error) {
 	}
 
 	command := fmt.Sprintf("rg %s -i --json", input.Query)
+
+	fmt.Println(command)
+
 	result, err := RunBashCommand(command, input.Path)
 
 	if err != nil {

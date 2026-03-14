@@ -30,6 +30,7 @@ const (
 	GLM_4_7                OpenRouterModel = "z-ai/glm-4.7"
 	QWEN_3_CODER_FLASH     OpenRouterModel = "qwen/qwen3-coder-flash"
 	GPT_5_NANO             OpenRouterModel = "openai/gpt-5-nano"
+	GLM_5                  OpenRouterModel = "z-ai/glm-5"
 )
 
 func NewOpenRouterProvider() *OpenRouterProvider {
@@ -37,7 +38,7 @@ func NewOpenRouterProvider() *OpenRouterProvider {
 		Model: MINIMAX_M2_5,
 		Tools: []tools.Tool{
 			tools.BashTool,
-			tools.CodeSearchTool,
+			// tools.CodeSearchTool,
 			tools.FileReadTool,
 			tools.FileSearchTool,
 			tools.FileWriteTool,
@@ -195,7 +196,7 @@ type Conversation struct {
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(MINIMAX_M2_5, true)
+	r.SetModel(GPT_5_1_CODEX_MINI, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {

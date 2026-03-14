@@ -7,16 +7,27 @@ import (
 	"zipcode/src/config"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
-	"zipcode/src/utils"
 )
 
+type ResponseEventType int
+
+const (
+	Tool ResponseEventType = iota
+	Message
+)
+
+type ResponseEvent struct {
+	EventType ResponseEventType
+	Message   string
+}
+
 type Executor struct {
-	Events chan string
+	Events chan ResponseEvent
 }
 
 func NewExecutor() Executor {
 	return Executor{
-		Events: make(chan string),
+		Events: make(chan ResponseEvent),
 	}
 }
 
@@ -73,9 +84,9 @@ type NormalResponseContent struct {
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResultStatus, error) {
-	utils.PrintStruct(response)
+	// utils.PrintStruct(response)
 
-	if response.ToolCalls == nil && response.Content != "" {
+	if response.ToolCalls == nil && strings.TrimSpace(response.Content) != "" {
 		var content NormalResponseContent
 		err := json.Unmarshal([]byte(response.Content), &content)
 
@@ -83,15 +94,11 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 			return "", ExecutionFailed, err
 		}
 
-		e.pushEvent(content.Data.Message)
+		e.pushEvent(Message, content.Data.Message)
 		return content.Data.Message, ExecutionCompleted, nil
 	}
 
-	if response.ToolCalls == nil && strings.Contains(response.Content, "finish") {
-		return response.Content, ExecutionCompleted, nil
-	}
-
-	if response.Content == "" && len(response.ToolCalls) > 0 {
+	if strings.TrimSpace(response.Content) == "" && len(response.ToolCalls) > 0 {
 		tool := ToolCallResponseData{
 			Id:        response.ToolCalls[0].ID,
 			Name:      response.ToolCalls[0].Function.Name,
@@ -109,9 +116,12 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 	return "", ExecutionFailed, errors.New("invalid response type")
 }
 
-func (e *Executor) pushEvent(value string) {
+func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
 	if !config.HEADLESS {
-		e.Events <- value
+		e.Events <- ResponseEvent{
+			EventType: eventType,
+			Message:   value,
+		}
 	}
 }
 
@@ -121,7 +131,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		var bashInput tools.BashInput
 		err := json.Unmarshal(input.Arguments, &bashInput)
 
-		e.pushEvent(bashInput.Message)
+		e.pushEvent(Tool, bashInput.Message)
 
 		if err != nil {
 			return nil, err
@@ -135,35 +145,35 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			Content:    string(value),
 		}, nil
 
-	case "code_search":
-		var codeSearchInput tools.CodeSearchInput
-		err := json.Unmarshal(input.Arguments, &codeSearchInput)
+	// case "code_search":
+	// 	var codeSearchInput tools.CodeSearchInput
+	// 	err := json.Unmarshal(input.Arguments, &codeSearchInput)
 
-		e.pushEvent(codeSearchInput.Message)
+	// 	e.pushEvent(Tool,codeSearchInput.Message)
 
-		if err != nil {
-			return nil, err
-		}
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
 
-		output, err := tools.RunCodeSearch(codeSearchInput)
+	// 	output, err := tools.RunCodeSearch(codeSearchInput)
 
-		if err != nil {
-			return nil, err
-		}
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
 
-		value, err := json.Marshal(output)
+	// 	value, err := json.Marshal(output)
 
-		return &ToolResultRequestData{
-			ToolCallID: input.Id,
-			Role:       "tool",
-			Content:    string(value),
-		}, nil
+	// 	return &ToolResultRequestData{
+	// 		ToolCallID: input.Id,
+	// 		Role:       "tool",
+	// 		Content:    string(value),
+	// 	}, nil
 
 	case "file_search":
 		var fileSearchInput tools.FileSearchInput
 		err := json.Unmarshal(input.Arguments, &fileSearchInput)
 
-		e.pushEvent(fileSearchInput.Message)
+		e.pushEvent(Tool, fileSearchInput.Message)
 
 		if err != nil {
 			return nil, err
@@ -187,7 +197,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		var fileReadInput tools.FileReadInput
 		err := json.Unmarshal(input.Arguments, &fileReadInput)
 
-		e.pushEvent(fileReadInput.Message)
+		e.pushEvent(Tool, fileReadInput.Message)
 
 		if err != nil {
 			return nil, err
@@ -214,7 +224,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			return nil, err
 		}
 
-		e.pushEvent(fileWriteInput.Message)
+		e.pushEvent(Tool, fileWriteInput.Message)
 
 		output, err := tools.RunFileWrite(fileWriteInput)
 

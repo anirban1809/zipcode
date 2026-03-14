@@ -2,7 +2,6 @@ package agent
 
 import (
 	"encoding/json"
-	"fmt"
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
@@ -49,7 +48,7 @@ type TaskRequestData struct {
 	Context   string `json:"context,omitempty"`
 }
 
-func (r Runtime) GetExecutorEvents() chan string {
+func (r Runtime) GetExecutorEvents() chan ResponseEvent {
 	return r.Executor.Events
 }
 
@@ -103,7 +102,7 @@ func (r Runtime) Run(prompt string) error {
 		lastResponse := conv.Messages[lastResponseIndex]
 		next, status, err := r.Executor.ProcessResponse(lastResponse)
 
-		fmt.Println(next)
+		// fmt.Println(next)
 
 		if err != nil {
 			return err

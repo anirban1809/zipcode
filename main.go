@@ -21,7 +21,7 @@ func main() {
 	// config.HEADLESS = true
 	// workspace := workspace.Load("/Users/anirban/Documents/Code/ln-api")
 	// runtime := agent.NewRuntime(&workspace)
-	// err := runtime.Run("Create a description of all the dynamodb tables used in this project")
+	// err := runtime.Run("list out all the dynamodb tables used in this project ")
 	// if err != nil {
 	// 	panic(err)
 	// }

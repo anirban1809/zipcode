@@ -22,3 +22,14 @@ func GetTerminalSize() (int, int, error) {
 
 	return width, height, nil
 }
+
+func FlexGap(totalWidth int, subWidth int) string {
+	gap := totalWidth - subWidth
+	gapText := ""
+
+	for range gap {
+		gapText += " "
+	}
+
+	return gapText
+}

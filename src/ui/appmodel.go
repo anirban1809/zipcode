@@ -96,13 +96,14 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		case "enter":
 			if a.Prompt.Value() != "" {
+				a.Prompt.SetValue("")
 				task := components.CreateTask(a.Prompt.Value())
 				task.Running = true
 				cmds = append(cmds, task.Init())
 				a.Tasks = append(a.Tasks, task)
 				go a.Runtime.Run(a.Prompt.Value())
+				a.StatusBar.SetStatus(components.Status_RUNNING)
 				a.renderView()
-				a.Prompt.SetValue("")
 				return a, tea.Batch(tea.Batch(cmds...),
 					waitForRuntimeEvent(a.Runtime.GetExecutorEvents()))
 			}
@@ -113,6 +114,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.getCurrentTask().AppendSub(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(" └── "+msg.Message) + "\n")
 		} else {
 			a.getCurrentTask().Running = false
+			a.StatusBar.SetStatus(components.Status_IDLE)
 			a.getCurrentTask().UpdateResult("\n" + lipgloss.NewStyle().Render(msg.Message) + "\n")
 		}
 		a.renderView()
@@ -122,7 +124,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ClearScreen()
 		width, height, _ := utils.GetTerminalSize()
 		a.ViewPort.Width = width - 2
-		a.ViewPort.Height = height - 8
+		a.ViewPort.Height = height - 4
 	}
 
 	var cmd tea.Cmd
@@ -144,10 +146,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a AppModel) View() string {
-	banner := BannerStyle(fmt.Sprintf("ZipCode v0.0.1\nCurrent Workspace: %s\n", workspace.AbsToTildePath(a.Workspace.RootPath)), a.ViewPort.Width)
 	promptView := lipgloss.NewStyle().Render(a.Prompt.View())
 	viewPortView := wordwrap.String(lipgloss.NewStyle().Render(a.ViewPort.View()), a.ViewPort.Width-2)
-	return fmt.Sprintf("\n%s\n%s\n%s\n%s", banner, viewPortView, promptView, a.StatusBar.View())
+	return fmt.Sprintf("\n%s\n%s\n%s", viewPortView, promptView, a.StatusBar.View())
 }
 
 func ClearScreen() {

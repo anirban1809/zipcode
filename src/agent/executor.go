@@ -17,17 +17,21 @@ const (
 )
 
 type ResponseEvent struct {
+	Question  string
+	Options   []string
 	EventType ResponseEventType
 	Message   string
 }
 
 type Executor struct {
-	Events chan ResponseEvent
+	EventChannel   chan ResponseEvent
+	MessageChannel chan string
 }
 
 func NewExecutor() Executor {
 	return Executor{
-		Events: make(chan ResponseEvent),
+		EventChannel:   make(chan ResponseEvent),
+		MessageChannel: make(chan string),
 	}
 }
 
@@ -117,11 +121,31 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 }
 
 func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
-	if !config.HEADLESS {
-		e.Events <- ResponseEvent{
-			EventType: eventType,
-			Message:   value,
-		}
+	if config.HEADLESS {
+		return
+	}
+
+	e.EventChannel <- ResponseEvent{
+		EventType: eventType,
+		Message:   value,
+	}
+}
+
+func (e *Executor) pushEventWithQuestion(
+	eventType ResponseEventType,
+	value string,
+	question string,
+	options []string,
+) {
+	if config.HEADLESS {
+		return
+	}
+
+	e.EventChannel <- ResponseEvent{
+		EventType: eventType,
+		Message:   value,
+		Question:  question,
+		Options:   options,
 	}
 }
 
@@ -224,21 +248,36 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			return nil, err
 		}
 
-		e.pushEvent(Tool, fileWriteInput.Message)
+		e.pushEventWithQuestion(
+			Tool,
+			fileWriteInput.Message,
+			"Do you want to make this change?",
+			[]string{"Yes", "No", "Yes, and do not ask again for this session"},
+		)
 
-		output, err := tools.RunFileWrite(fileWriteInput)
+		msg := <-e.MessageChannel
 
-		if err != nil {
-			return nil, err
+		if msg == "Yes" || msg == "Yes, and do not ask again for this session" {
+			output, err := tools.RunFileWrite(fileWriteInput)
+
+			if err != nil {
+				return nil, err
+			}
+			value, err := json.Marshal(output)
+
+			return &ToolResultRequestData{
+				ToolCallID: input.Id,
+				Role:       "tool",
+				Content:    string(value),
+			}, nil
 		}
-
-		value, err := json.Marshal(output)
 
 		return &ToolResultRequestData{
 			ToolCallID: input.Id,
 			Role:       "tool",
-			Content:    string(value),
+			Content:    string("Action denied by user"),
 		}, nil
+
 	}
 	return nil, errors.New("invalid tool name")
 }

@@ -48,8 +48,12 @@ type TaskRequestData struct {
 	Context   string `json:"context,omitempty"`
 }
 
-func (r Runtime) GetExecutorEvents() chan ResponseEvent {
-	return r.Executor.Events
+func (r Runtime) GetExecutorEventChannel() chan ResponseEvent {
+	return r.Executor.EventChannel
+}
+
+func (r Runtime) GetExecutorMessageChannel() chan string {
+	return r.Executor.MessageChannel
 }
 
 func (r Runtime) Run(prompt string) error {

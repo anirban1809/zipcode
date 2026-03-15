@@ -8,11 +8,12 @@ import (
 )
 
 type Task struct {
-	Prompt  string
-	Subs    string
-	Result  string
-	Running bool
-	Spinner spinner.Model
+	Prompt   string
+	Subs     string
+	Result   string
+	Running  bool
+	Question Question
+	Spinner  spinner.Model
 }
 
 func CreateTask(prompt string) Task {
@@ -27,6 +28,10 @@ func CreateTask(prompt string) Task {
 
 func (t *Task) AppendSub(value string) {
 	t.Subs += value
+}
+
+func (t *Task) AppendQuestion(value Question) {
+	t.Question = value
 }
 
 func (t *Task) UpdateResult(value string) {

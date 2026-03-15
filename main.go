@@ -10,7 +10,7 @@ import (
 
 func main() {
 	ui.ClearScreen()
-	workspace := workspace.Load("/Users/anirban/Documents/Code/ln-api")
+	workspace := workspace.Load("/Users/anirban/Documents/Code/auto-code")
 
 	p := tea.NewProgram(ui.Iniaitalize(&workspace))
 	if _, err := p.Run(); err != nil {

@@ -26,13 +26,12 @@ type AppModel struct {
 }
 
 func Iniaitalize(workspace *workspace.Workspace) AppModel {
-
 	width, height, _ := utils.GetTerminalSize()
 
 	input := textinput.New()
 	input.Placeholder = "Enter text..."
 	input.Focus()
-	input.CharLimit = 256
+	input.CharLimit = 1024
 	input.Width = width - 2
 	vp := viewport.New(width-2, height-7)
 	vp.SetContent(``)
@@ -68,17 +67,24 @@ func renderBottomAligned(content string, height int) string {
 }
 
 func (a *AppModel) renderView() {
-	var b strings.Builder
-
+	var b string
 	for _, task := range a.Tasks {
-		b.WriteString(task.View())
-		b.WriteString("\n")
-		b.WriteString(task.Subs)
-		b.WriteString(task.Result)
-		b.WriteString("\n")
-	}
+		b += (task.View())
+		b += ("\n")
+		b += (task.Subs)
+		b += ("\n")
+		if task.Question.Selected {
+			b += (task.Question.Question)
+			b += ("\n")
+			b += (task.Question.GetSelectedItem())
+		} else {
+			b += (task.Question.View())
+		}
 
-	a.ViewPort.SetContent(renderBottomAligned(b.String(), a.ViewPort.Height))
+		b += (task.Result)
+		b += ("\n")
+	}
+	a.ViewPort.SetContent(renderBottomAligned(b, a.ViewPort.Height))
 	a.ViewPort.GotoBottom()
 }
 
@@ -96,29 +102,44 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		case "enter":
 			if a.Prompt.Value() != "" {
-				a.Prompt.SetValue("")
 				task := components.CreateTask(a.Prompt.Value())
 				task.Running = true
 				cmds = append(cmds, task.Init())
 				a.Tasks = append(a.Tasks, task)
 				go a.Runtime.Run(a.Prompt.Value())
+				a.Prompt.SetValue("")
 				a.StatusBar.SetStatus(components.Status_RUNNING)
 				a.renderView()
 				return a, tea.Batch(tea.Batch(cmds...),
-					waitForRuntimeEvent(a.Runtime.GetExecutorEvents()))
+					waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
+			}
+			// If a question is active
+			for i := range a.Tasks {
+				if a.Tasks[i].Question.Selected {
+					answer := a.Tasks[i].Question.GetSelectedItem()
+					a.Runtime.GetExecutorMessageChannel() <- answer
+					a.Tasks[i].Question.Selected = false
+					a.renderView()
+					return a, nil
+				}
 			}
 		}
 
 	case agent.ResponseEvent:
 		if msg.EventType == agent.Tool {
 			a.getCurrentTask().AppendSub(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(" └── "+msg.Message) + "\n")
+			if msg.Question != "" {
+				question := components.CreateQuestion(msg.Question, msg.Options)
+				a.getCurrentTask().AppendQuestion(question)
+			}
+
 		} else {
 			a.getCurrentTask().Running = false
 			a.StatusBar.SetStatus(components.Status_IDLE)
 			a.getCurrentTask().UpdateResult("\n" + lipgloss.NewStyle().Render(msg.Message) + "\n")
 		}
 		a.renderView()
-		return a, waitForRuntimeEvent(a.Runtime.GetExecutorEvents())
+		return a, waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel())
 
 	case tea.WindowSizeMsg:
 		ClearScreen()
@@ -134,6 +155,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	for i := range a.Tasks {
 		a.Tasks[i], cmd = a.Tasks[i].Update(msg)
+		cmds = append(cmds, cmd)
+
+		a.Tasks[i].Question, cmd = a.Tasks[i].Question.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 

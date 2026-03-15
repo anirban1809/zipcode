@@ -2,17 +2,16 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"zipcode/src/agent"
 	"zipcode/src/ui/components"
+	"zipcode/src/utils"
 	"zipcode/src/workspace"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/term"
 	"github.com/muesli/reflow/wordwrap"
 )
 
@@ -22,13 +21,13 @@ type AppModel struct {
 	Prompt    textinput.Model
 	ViewPort  viewport.Model
 	Result    string
-	Running   bool
 	Tasks     []components.Task
+	StatusBar components.StatusBar
 }
 
 func Iniaitalize(workspace *workspace.Workspace) AppModel {
 
-	width, height, _ := getTerminalSize()
+	width, height, _ := utils.GetTerminalSize()
 
 	input := textinput.New()
 	input.Placeholder = "Enter text..."
@@ -45,6 +44,7 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 		Prompt:    input,
 		Result:    "",
 		ViewPort:  vp,
+		StatusBar: components.CreateStatusBar(workspace.RootPath, "openai/gpt-5.1-codex-mini"),
 	}
 }
 
@@ -56,16 +56,6 @@ func waitForRuntimeEvent(ch <-chan agent.ResponseEvent) tea.Cmd {
 	return func() tea.Msg {
 		return <-ch
 	}
-}
-
-func getTerminalSize() (int, int, error) {
-	fd := (os.Stdout.Fd())
-	width, height, err := term.GetSize(fd)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return width, height, nil
 }
 
 func renderBottomAligned(content string, height int) string {
@@ -88,12 +78,12 @@ func (a *AppModel) renderView() {
 		b.WriteString("\n")
 	}
 
-	if a.Result != "" {
-		b.WriteString(a.Result)
-	}
-
 	a.ViewPort.SetContent(renderBottomAligned(b.String(), a.ViewPort.Height))
 	a.ViewPort.GotoBottom()
+}
+
+func (a AppModel) getCurrentTask() *components.Task {
+	return &a.Tasks[len(a.Tasks)-1]
 }
 
 func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -105,7 +95,6 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			return a, tea.Quit
 		case "enter":
-			a.Running = true
 			if a.Prompt.Value() != "" {
 				task := components.CreateTask(a.Prompt.Value())
 				task.Running = true
@@ -121,23 +110,19 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agent.ResponseEvent:
 		if msg.EventType == agent.Tool {
-			a.Tasks[len(a.Tasks)-1].AppendSub(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(" └── "+msg.Message) + "\n")
+			a.getCurrentTask().AppendSub(lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(" └── "+msg.Message) + "\n")
 		} else {
-			a.Tasks[len(a.Tasks)-1].Running = false
-			a.Tasks[len(a.Tasks)-1].UpdateResult("\n" + lipgloss.NewStyle().Render(msg.Message) + "\n")
+			a.getCurrentTask().Running = false
+			a.getCurrentTask().UpdateResult("\n" + lipgloss.NewStyle().Render(msg.Message) + "\n")
 		}
-
-		// a.ViewPort.SetContent(renderBottomAligned(a.Result, a.ViewPort.Height))
-		// a.ViewPort.GotoBottom()
-
 		a.renderView()
 		return a, waitForRuntimeEvent(a.Runtime.GetExecutorEvents())
 
 	case tea.WindowSizeMsg:
 		ClearScreen()
-		width, height, _ := getTerminalSize()
+		width, height, _ := utils.GetTerminalSize()
 		a.ViewPort.Width = width - 2
-		a.ViewPort.Height = height - 7
+		a.ViewPort.Height = height - 8
 	}
 
 	var cmd tea.Cmd
@@ -159,15 +144,10 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a AppModel) View() string {
-	banner := lipgloss.NewStyle().Width(a.ViewPort.Width).
-		Border(lipgloss.NormalBorder()).
-		BorderLeft(false).
-		BorderRight(false).
-		BorderTop(false).
-		Render(fmt.Sprintf("ZipCode v0.0.1\nCurrent Workspace: %s\n", a.Workspace.RootPath))
-	promptView := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderLeft(false).BorderRight(false).Render(a.Prompt.View())
+	banner := BannerStyle(fmt.Sprintf("ZipCode v0.0.1\nCurrent Workspace: %s\n", workspace.AbsToTildePath(a.Workspace.RootPath)), a.ViewPort.Width)
+	promptView := lipgloss.NewStyle().Render(a.Prompt.View())
 	viewPortView := wordwrap.String(lipgloss.NewStyle().Render(a.ViewPort.View()), a.ViewPort.Width-2)
-	return fmt.Sprintf("\n%s\n%s\n%s", banner, viewPortView, promptView)
+	return fmt.Sprintf("\n%s\n%s\n%s\n%s", banner, viewPortView, promptView, a.StatusBar.View())
 }
 
 func ClearScreen() {

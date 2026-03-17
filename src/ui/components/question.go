@@ -12,6 +12,7 @@ type Question struct {
 	Cursor         int
 	SelectedOption int
 	Selected       bool
+	Visible        bool
 }
 
 func CreateQuestion(question string, options []string) Question {
@@ -54,6 +55,10 @@ func (a Question) GetSelectedItem() string {
 }
 
 func (a Question) View() string {
+	if !a.Visible {
+		return ""
+	}
+
 	question := a.Question
 	optionText := ""
 
@@ -65,5 +70,5 @@ func (a Question) View() string {
 		optionText += fmt.Sprintf(" %s\n", option)
 	}
 
-	return fmt.Sprintf("%s\n%s", question, optionText)
+	return fmt.Sprintf("\n%s\n%s", question, optionText)
 }

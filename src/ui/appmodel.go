@@ -102,6 +102,23 @@ func (a *AppModel) ProcessQuestion() {
 	a.Question.Selected = false
 }
 
+func (a *AppModel) ProcessCommandsMenu() {
+	if !a.CommandsMenu.IsVisible() || !a.CommandsMenu.IsSelected() {
+		return
+	}
+	a.CommandsMenu.SetVisible(false)
+	i := a.CommandsMenu.GetSelectedIndex()
+
+	switch a.Commands[i] {
+	case "/model":
+		break
+	case "/help":
+		break
+	case "/exit":
+		break
+	}
+}
+
 func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
@@ -111,6 +128,12 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			return a, tea.Quit
 		case "enter":
+			if !strings.HasPrefix(a.Prompt.Value(), "/") {
+				a.Prompt.SetValue("")
+				return a, tea.Batch(tea.Batch(cmds...),
+					waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
+			}
+
 			if a.Prompt.Value() != "" {
 				task := components.CreateTask(a.Prompt.Value())
 				task.Running = true
@@ -124,8 +147,6 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
 			}
 
-		case "/":
-			a.CommandsMenu.SetVisible(true)
 		}
 
 	case agent.ResponseEvent:
@@ -154,9 +175,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	a.ProcessQuestion()
 
-	if a.CommandsMenu.IsSelected() {
-		a.CommandsMenu.SetVisible(false)
-	}
+	a.CommandsMenu.SetVisible(strings.HasPrefix(a.Prompt.Value(), "/"))
 
 	a.Prompt, cmd = a.Prompt.Update(msg)
 	cmds = append(cmds, cmd)

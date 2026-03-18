@@ -19,6 +19,7 @@ func CreateQuestion(question string, options []string) Question {
 	return Question{
 		Question: question,
 		Options:  options,
+		Selected: false,
 		Cursor:   0,
 	}
 }

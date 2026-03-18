@@ -23,6 +23,10 @@ func CreateMenu(items []string, itemDescriptions []string) Menu {
 	}
 }
 
+func (m Menu) IsVisible() bool {
+	return m.visible
+}
+
 func (m *Menu) SetVisible(value bool) {
 	m.visible = value
 }

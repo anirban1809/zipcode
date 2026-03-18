@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
 )
 
 type AppModel struct {
@@ -27,6 +28,7 @@ type AppModel struct {
 	CommandsMenu        components.Menu
 	Commands            []string
 	CommandDescriptions []string
+	StatusBar           components.StatusBar
 }
 
 func Iniaitalize(workspace *workspace.Workspace) AppModel {
@@ -51,11 +53,13 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 		CommandsMenu:        components.CreateMenu(items, itemDescriptions),
 		Commands:            items,
 		CommandDescriptions: itemDescriptions,
+		StatusBar:           components.CreateStatusBar(workspace.RootPath, "openai/gpt-5.1-codex-mini"),
+		ActiveConversation:  "\n",
 	}
 }
 
 func (a AppModel) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, a.StatusBar.Init())
 }
 
 func waitForRuntimeEvent(ch <-chan agent.ResponseEvent) tea.Cmd {
@@ -97,6 +101,11 @@ func (a *AppModel) ProcessCommandsMenu() tea.Cmd {
 	return nil
 }
 
+func (a AppModel) GetConversation() string {
+	content := a.Conversation + "\n" + a.ActiveConversation
+	return wordwrap.String(content, a.ViewPort.Width)
+}
+
 func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
@@ -114,12 +123,11 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if a.Prompt.Value() != "" {
-				task := components.CreateTask(a.Prompt.Value())
-				task.Running = true
-				cmds = append(cmds, task.Init())
-				a.Tasks = append(a.Tasks, task)
 				go a.Runtime.Run(a.Prompt.Value())
-				a.ActiveConversation += a.Prompt.Value() + "\n"
+				a.ActiveConversation += "⏺ " + a.Prompt.Value() + "\n"
+				a.StatusBar.SetStatus(components.Status_RUNNING)
+				a.ViewPort.SetContent(a.GetConversation())
+				a.ViewPort.GotoBottom()
 				a.Prompt.SetValue("")
 				return a, tea.Batch(tea.Batch(cmds...),
 					waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
@@ -130,21 +138,29 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agent.ResponseEvent:
 		if msg.EventType == agent.Tool {
 			a.ActiveConversation += (lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(" └── "+msg.Message) + "\n")
+			a.ViewPort.SetContent(a.GetConversation())
+			a.ViewPort.GotoBottom()
 			if msg.Question != "" {
 				a.SetQuestion(components.CreateQuestion(msg.Question, msg.Options))
 				a.Question.Visible = true
 			}
 
 		} else {
-			a.getCurrentTask().Running = false
 			a.ActiveConversation += ("\n" + lipgloss.NewStyle().Render(msg.Message) + "\n")
+			a.Conversation += "\n" + strings.Replace(a.ActiveConversation, "⏺ ", "✔ ", 1)
+			a.ActiveConversation = "\n"
+			a.StatusBar.SetStatus(components.Status_IDLE)
+			a.ViewPort.SetContent(a.GetConversation())
+			a.ViewPort.GotoBottom()
 		}
 		return a, waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel())
 
 	case tea.WindowSizeMsg:
 		ClearScreen()
-		width, _, _ := utils.GetTerminalSize()
+		width, height, _ := utils.GetTerminalSize()
+		a.ViewPort.GotoBottom()
 		a.ViewPort.Width = width - 2
+		a.ViewPort.Height = height - 4
 	}
 
 	a.ProcessQuestion()
@@ -156,13 +172,6 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.Prompt, cmd = a.Prompt.Update(msg)
 	cmds = append(cmds, cmd)
 
-	for i := range a.Tasks {
-		a.Tasks[i], cmd = a.Tasks[i].Update(msg)
-		cmds = append(cmds, cmd)
-	}
-
-	// a.renderView()
-
 	a.Question, cmd = a.Question.Update(msg)
 	cmds = append(cmds, cmd)
 
@@ -170,6 +179,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	a.CommandsMenu, cmd = a.CommandsMenu.Update(msg)
+	cmds = append(cmds, cmd)
+
+	a.StatusBar, cmd = a.StatusBar.Update(msg)
 	cmds = append(cmds, cmd)
 
 	return a, tea.Batch(cmds...)
@@ -181,8 +193,8 @@ func (a *AppModel) SetQuestion(question components.Question) {
 
 func (a AppModel) View() string {
 	promptView := lipgloss.NewStyle().Render(a.Prompt.View())
-	// viewPortView := a.ViewPort.View()
-	return fmt.Sprintf("\n%s\n%s\n%s%s", a.ActiveConversation, a.Question.View(), promptView, a.CommandsMenu.View())
+	viewPortView := lipgloss.NewStyle().Padding(1).Render(a.ViewPort.View())
+	return fmt.Sprintf("\n%s\n%s\n%s%s\n%s", viewPortView, a.Question.View(), promptView, a.CommandsMenu.View(), a.StatusBar.View())
 }
 
 func ClearScreen() {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type Menu struct {
@@ -70,17 +71,13 @@ func (m Menu) View() string {
 	if !m.visible {
 		return ""
 	}
-
 	menuText := ""
-
 	for i, item := range m.items {
 		if m.cursor == i {
-			menuText += fmt.Sprintf(" > %s\t%s\n", item, m.itemDescriptions[i])
+			menuText += lipgloss.NewStyle().Foreground(lipgloss.Color("#47daff")).Render(fmt.Sprintf("> %-20s %s", item, m.itemDescriptions[i])) + "\n"
 			continue
 		}
-
-		menuText += fmt.Sprintf("   %s\t%s\n", item, m.itemDescriptions[i])
+		menuText += lipgloss.NewStyle().Foreground(lipgloss.Color("#31a1bd")).Render(fmt.Sprintf("  %-20s %s", item, m.itemDescriptions[i])) + "\n"
 	}
-
 	return fmt.Sprintf("\n%s", menuText)
 }

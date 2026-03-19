@@ -144,7 +144,10 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agent.ResponseEvent:
 		if msg.EventType == agent.Tool {
-			a.ActiveConversation += (lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(" └── "+msg.Message) + "\n")
+			a.ActiveConversation += (lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")).
+				Render(" └── "+msg.Message) + "\n")
+
 			a.ViewPort.SetContent(a.GetConversation())
 			a.ViewPort.GotoBottom()
 			if msg.Question != "" {
@@ -199,7 +202,7 @@ func (a *AppModel) SetQuestion(question components.Question) {
 }
 
 func (a AppModel) View() string {
-	promptView := lipgloss.NewStyle().Render(a.Prompt.View())
+	promptView := lipgloss.NewStyle().PaddingBottom(1).Render(a.Prompt.View())
 	viewPortView := lipgloss.NewStyle().Padding(1).Render(a.ViewPort.View())
 	return fmt.Sprintf("\n%s\n%s\n%s%s\n%s", viewPortView, a.Question.View(), promptView, a.CommandsMenu.View(), a.StatusBar.View())
 }

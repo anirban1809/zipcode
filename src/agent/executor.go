@@ -3,10 +3,12 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"zipcode/src/config"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
+	"zipcode/src/utils"
 )
 
 type ResponseEventType int
@@ -88,21 +90,32 @@ type NormalResponseContent struct {
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResultStatus, error) {
-	// utils.PrintStruct(response)
+	if config.HEADLESS {
+		utils.PrintStruct(response)
+	}
+
+	if response.ToolCalls == nil && strings.TrimSpace(response.Content) == "" {
+		return "retry", ExecutionSucceeded, nil
+	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) != "" {
 		var content NormalResponseContent
 		err := json.Unmarshal([]byte(response.Content), &content)
 
 		if err != nil {
-			return "", ExecutionFailed, err
+			fmt.Println(err.Error())
+			// unmarshalling fails means the llm returned a plain string instead
+			// of a JSON response. We'll use the string as the executor response
+			e.pushEvent(Message, response.Content)
+			return response.Content, ExecutionCompleted, nil
 		}
 
 		e.pushEvent(Message, content.Data.Message)
 		return content.Data.Message, ExecutionCompleted, nil
 	}
 
-	if strings.TrimSpace(response.Content) == "" && len(response.ToolCalls) > 0 {
+	if len(response.ToolCalls) > 0 {
+		response.Content = ""
 		tool := ToolCallResponseData{
 			Id:        response.ToolCalls[0].ID,
 			Name:      response.ToolCalls[0].Function.Name,

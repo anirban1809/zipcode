@@ -32,6 +32,7 @@ const (
 	QWEN_3_CODER_FLASH     OpenRouterModel = "qwen/qwen3-coder-flash"
 	GPT_5_NANO             OpenRouterModel = "openai/gpt-5-nano"
 	GLM_5                  OpenRouterModel = "z-ai/glm-5"
+	GPT_5_4_NANO           OpenRouterModel = "openai/gpt-5.4-nano"
 )
 
 func NewOpenRouterProvider() *OpenRouterProvider {
@@ -197,7 +198,7 @@ type Conversation struct {
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(MINIMAX_M2_7, true)
+	r.SetModel(LLAMA_3_3_70B_INSTRUCT, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {
@@ -217,50 +218,52 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 		fmt.Println("Failed to load env file")
 	}
 
-	var prompts []ChatMessage
-
-	for _, message := range conversation.Messages {
-		prompts = append(prompts, ChatMessage{Content: message.Content, Role: message.Role})
-	}
-
-	requestBody := OpenRouterRequest{
-		Model:    p.Model,
-		Messages: conversation.Messages,
-		Stream:   false,
-		Tools:    p.Tools,
-	}
-
-	value, err := json.Marshal(requestBody)
-
-	// fmt.Println(string(value))
-
-	req, err := http.NewRequest(http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(value))
-
-	if err != nil {
-		return OpenRouterResponse{}, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("OPENROUTER_API_KEY")))
-	client := &http.Client{}
-
-	res, err := client.Do(req)
-	if err != nil {
-		return OpenRouterResponse{}, err
-	}
-
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-
-	if err != nil {
-		return OpenRouterResponse{}, err
-	}
-
+	retry := true
 	var finalResponse OpenRouterResponse
-	err = json.Unmarshal(body, &finalResponse)
 
-	if err != nil {
-		return OpenRouterResponse{}, err
+	for retry {
+		requestBody := OpenRouterRequest{
+			Model:    p.Model,
+			Messages: conversation.Messages,
+			Stream:   false,
+			Tools:    p.Tools,
+		}
+
+		value, err := json.Marshal(requestBody)
+
+		// fmt.Println(string(value))
+
+		req, err := http.NewRequest(http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(value))
+
+		if err != nil {
+			return OpenRouterResponse{}, err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("OPENROUTER_API_KEY")))
+		client := &http.Client{}
+
+		res, err := client.Do(req)
+		if err != nil {
+			return OpenRouterResponse{}, err
+		}
+
+		defer res.Body.Close()
+		body, err := io.ReadAll(res.Body)
+
+		if err != nil {
+			return OpenRouterResponse{}, err
+		}
+
+		err = json.Unmarshal(body, &finalResponse)
+
+		if err != nil {
+			return OpenRouterResponse{}, err
+		}
+
+		if len(finalResponse.Choices) > 0 {
+			retry = false
+		}
 	}
 
 	return finalResponse, nil

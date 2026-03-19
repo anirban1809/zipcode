@@ -53,7 +53,7 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 		CommandsMenu:        components.CreateMenu(items, itemDescriptions),
 		Commands:            items,
 		CommandDescriptions: itemDescriptions,
-		StatusBar:           components.CreateStatusBar(workspace.RootPath, "openai/gpt-5.1-codex-mini"),
+		StatusBar:           components.CreateStatusBar(workspace.RootPath, "minimax/minimax-m2.5"),
 		ActiveConversation:  "\n",
 	}
 }
@@ -66,10 +66,6 @@ func waitForRuntimeEvent(ch <-chan agent.ResponseEvent) tea.Cmd {
 	return func() tea.Msg {
 		return <-ch
 	}
-}
-
-func (a AppModel) getCurrentTask() *components.Task {
-	return &a.Tasks[len(a.Tasks)-1]
 }
 
 func (a *AppModel) ProcessQuestion() {
@@ -132,6 +128,17 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, tea.Batch(tea.Batch(cmds...),
 					waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
 			}
+
+		case "tab":
+			if a.StatusBar.GetMode() == components.Mode_PLAN {
+				a.StatusBar.SetMode(components.Mode_EDIT)
+				return a, tea.Batch(tea.Batch(cmds...),
+					waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
+			}
+
+			a.StatusBar.SetMode(components.Mode_PLAN)
+			return a, tea.Batch(tea.Batch(cmds...),
+				waitForRuntimeEvent(a.Runtime.GetExecutorEventChannel()))
 
 		}
 

@@ -2,7 +2,6 @@ package components
 
 import (
 	"fmt"
-	"strings"
 	"zipcode/src/config"
 	"zipcode/src/utils"
 	"zipcode/src/workspace"
@@ -21,7 +20,15 @@ type StatusBar struct {
 	Branch      string
 	Status      Status
 	Spinner     spinner.Model
+	Mode        Mode
 }
+
+type Mode string
+
+const (
+	Mode_PLAN Mode = "Plan"
+	Mode_EDIT Mode = "Edit"
+)
 
 type Status string
 
@@ -36,6 +43,7 @@ func CreateStatusBar(workspace string, model string) StatusBar {
 		Workspace: workspace,
 		Model:     model,
 		Status:    Status_IDLE,
+		Mode:      Mode_EDIT,
 		Spinner:   spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
 }
@@ -52,24 +60,17 @@ func (s StatusBar) Update(msg tea.Msg) (StatusBar, tea.Cmd) {
 
 func (s StatusBar) View() string {
 	width, _, _ := utils.GetTerminalSize()
-
-	top := buildPadding(width, "▄")
-	bottom := buildPadding(width, "▀")
-
 	bar := renderStatusBar(width, s)
 
-	return fmt.Sprintf("%s\n%s\n%s", top, bar, bottom)
+	return fmt.Sprintf("%s", bar)
 }
 
-func buildPadding(width int, char string) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#144492"))
+func (s StatusBar) GetMode() Mode {
+	return s.Mode
+}
 
-	var b strings.Builder
-	for range width {
-		b.WriteString(style.Render(char))
-	}
-
-	return b.String()
+func (s *StatusBar) SetMode(mode Mode) {
+	s.Mode = mode
 }
 
 func renderStatusBar(width int, s StatusBar) string {
@@ -82,9 +83,10 @@ func renderStatusBar(width int, s StatusBar) string {
 	}
 
 	status := fmt.Sprintf(
-		" %s%s | Workspace: %s (Branch: main) | Model: %s",
+		" %s%s (%s) | %s (main) | %s",
 		spinnerView,
 		s.Status,
+		s.Mode,
 		workspace.AbsToTildePath(s.Workspace),
 		s.Model,
 	)

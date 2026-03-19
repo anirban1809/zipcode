@@ -23,6 +23,7 @@ type OpenRouterModel string
 const (
 	GPT_5_2                OpenRouterModel = "openai/gpt-5.2"
 	MINIMAX_M2_5           OpenRouterModel = "minimax/minimax-m2.5"
+	MINIMAX_M2_7           OpenRouterModel = "minimax/minimax-m2.7"
 	CLAUDE_SONNET_4_6      OpenRouterModel = "anthropic/claude-sonnet-4.6"
 	GPT_5_1_CODEX_MINI     OpenRouterModel = "openai/gpt-5.1-codex-mini"
 	KIMI_K_2_5             OpenRouterModel = "moonshotai/kimi-k2.5"
@@ -196,7 +197,7 @@ type Conversation struct {
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(GPT_5_1_CODEX_MINI, true)
+	r.SetModel(MINIMAX_M2_7, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {

@@ -12,15 +12,17 @@ import (
 )
 
 type StatusBar struct {
-	Workspace   string
-	Model       string
-	TokensUsed  int
-	TotalTokens int
-	ContextUsed string
-	Branch      string
-	Status      Status
-	Spinner     spinner.Model
-	Mode        Mode
+	Workspace    string
+	Model        string
+	TokensUsed   int
+	TotalTokens  int
+	ContextUsed  string
+	Branch       string
+	Status       Status
+	Spinner      spinner.Model
+	Mode         Mode
+	InputTokens  int
+	OutputTokens int
 }
 
 type Mode string
@@ -58,6 +60,11 @@ func (s StatusBar) Update(msg tea.Msg) (StatusBar, tea.Cmd) {
 	return s, cmd
 }
 
+func (s *StatusBar) UpdateUsage(input int, output int) {
+	s.InputTokens = input
+	s.OutputTokens = output
+}
+
 func (s StatusBar) View() string {
 	width, _, _ := utils.GetTerminalSize()
 	bar := renderStatusBar(width, s)
@@ -73,6 +80,25 @@ func (s *StatusBar) SetMode(mode Mode) {
 	s.Mode = mode
 }
 
+func (s StatusBar) convertTokenValues() (string, string) {
+	input := ""
+	output := ""
+
+	if s.InputTokens > 1000 {
+		input = fmt.Sprintf("%.1fk", float32(s.InputTokens/1000))
+	} else {
+		input = fmt.Sprintf("%d", s.InputTokens)
+	}
+
+	if s.OutputTokens > 1000 {
+		output = fmt.Sprintf("%.1fk", float64(s.OutputTokens/1000))
+	} else {
+		output = fmt.Sprintf("%d", s.OutputTokens)
+	}
+
+	return input, output
+}
+
 func renderStatusBar(width int, s StatusBar) string {
 	appVersion := fmt.Sprintf("ZipCode v%s ", config.APP_VERSION)
 
@@ -82,13 +108,17 @@ func renderStatusBar(width int, s StatusBar) string {
 		spinnerView = s.Spinner.View()
 	}
 
+	inputTokens, outputTokens := s.convertTokenValues()
+
 	status := fmt.Sprintf(
-		" %s%s (%s) | %s (main) | %s",
+		" %s%s (%s) | %s (main) | %s | Usage: %s ↑ / %s ↓",
 		spinnerView,
 		s.Status,
 		s.Mode,
 		workspace.AbsToTildePath(s.Workspace),
 		s.Model,
+		inputTokens,
+		outputTokens,
 	)
 
 	content := status + utils.FlexGap(width, len(status)+len(appVersion)) + appVersion

@@ -95,7 +95,7 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) == "" {
-		return "retry", ExecutionSucceeded, nil
+		return `{"role":"user", "content":"Empty response, please retry"}`, ExecutionSucceeded, nil
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) != "" {
@@ -103,7 +103,7 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 		err := json.Unmarshal([]byte(response.Content), &content)
 
 		if err != nil {
-			fmt.Println(err.Error())
+			// fmt.Println(err.Error())
 			// unmarshalling fails means the llm returned a plain string instead
 			// of a JSON response. We'll use the string as the executor response
 			e.pushEvent(Message, response.Content)
@@ -261,14 +261,20 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			return nil, err
 		}
 
-		e.pushEventWithQuestion(
-			Tool,
-			fileWriteInput.Message,
-			"Do you want to make this change?",
-			[]string{"Yes", "No", "Yes, and do not ask again for this session"},
-		)
+		var msg string
 
-		msg := <-e.MessageChannel
+		if !config.HEADLESS {
+			e.pushEventWithQuestion(
+				Tool,
+				fileWriteInput.Message,
+				"Do you want to make this change?",
+				[]string{"Yes", "No", "Yes, and do not ask again for this session"},
+			)
+
+			msg = <-e.MessageChannel
+		} else {
+			msg = "Yes"
+		}
 
 		if msg == "Yes" || msg == "Yes, and do not ask again for this session" {
 			output, err := tools.RunFileWrite(fileWriteInput)
@@ -292,5 +298,10 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		}, nil
 
 	}
-	return nil, errors.New("invalid tool name")
+
+	return &ToolResultRequestData{
+		ToolCallID: input.Id,
+		Role:       "tool",
+		Content:    fmt.Sprintf(`{"message":"invalid tool name %s, please retry"}`, input.Name),
+	}, nil
 }

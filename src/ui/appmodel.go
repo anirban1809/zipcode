@@ -143,6 +143,8 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case agent.ResponseEvent:
+		a.StatusBar.UpdateUsage(a.Runtime.InputTokens, a.Runtime.OutputTokens)
+
 		if msg.EventType == agent.Tool {
 			a.ActiveConversation += (lipgloss.NewStyle().
 				Foreground(lipgloss.Color("240")).

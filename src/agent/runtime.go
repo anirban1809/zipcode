@@ -20,12 +20,15 @@ const (
 type RuntimeEvent string
 
 type Runtime struct {
-	Prompt    string
-	Executor  Executor
-	Status    RuntimeStatus
-	LLM       *llm.OpenRouterProvider
-	Workspace *workspace.Workspace
-	Tools     []tools.Tool
+	Prompt       string
+	Executor     Executor
+	Status       RuntimeStatus
+	LLM          *llm.OpenRouterProvider
+	Workspace    *workspace.Workspace
+	Tools        []tools.Tool
+	InputTokens  int
+	OutputTokens int
+	Conversation llm.Conversation
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
@@ -56,7 +59,7 @@ func (r Runtime) GetExecutorMessageChannel() chan string {
 	return r.Executor.MessageChannel
 }
 
-func (r Runtime) Run(prompt string) error {
+func (r *Runtime) Run(prompt string) error {
 
 	r.Status = Running
 	r.Prompt = prompt
@@ -75,27 +78,39 @@ func (r Runtime) Run(prompt string) error {
 		return err
 	}
 
-	initialConversation := llm.Conversation{
-		Messages: []llm.Message{
-			{
-				Content: prompts.MainSystemPrompt,
-				Role:    "system",
-			},
-			{
-				Content: string(taskRequestString),
-				Role:    "user",
-			},
-		},
-		Tools: []tools.Tool{
-			tools.BashTool,
-			tools.CodeSearchTool,
-			tools.FileReadTool,
-			tools.FileSearchTool,
-			tools.FileWriteTool,
-		},
-	}
+	var conv *llm.Conversation
 
-	conv, err := r.LLM.Chat(&initialConversation)
+	if len(r.Conversation.Messages) == 0 {
+		initialConversation := llm.Conversation{
+			Messages: []llm.Message{
+				{
+					Content: prompts.MainSystemPrompt,
+					Role:    "system",
+				},
+				{
+					Content: string(taskRequestString),
+					Role:    "user",
+				},
+			},
+			Tools: []tools.Tool{
+				tools.BashTool,
+				tools.CodeSearchTool,
+				tools.FileReadTool,
+				tools.FileSearchTool,
+				tools.FileWriteTool,
+			},
+		}
+
+		conv, err = r.LLM.Chat(&initialConversation)
+	} else {
+
+		r.Conversation.Messages = append(r.Conversation.Messages, llm.Message{
+			Content: string(taskRequestString),
+			Role:    "user",
+		})
+
+		conv, err = r.LLM.Chat(&r.Conversation)
+	}
 
 	if err != nil {
 		return err
@@ -106,7 +121,7 @@ func (r Runtime) Run(prompt string) error {
 		lastResponse := conv.Messages[lastResponseIndex]
 		next, status, err := r.Executor.ProcessResponse(lastResponse)
 
-		// fmt.Println(next)
+		// utils.Log(next + "\n")
 
 		if err != nil {
 			return err
@@ -126,7 +141,15 @@ func (r Runtime) Run(prompt string) error {
 
 		conv.Messages = append(conv.Messages, message)
 		conv, err = r.LLM.Chat(conv)
+
+		r.InputTokens += conv.PromptTokens
+		r.OutputTokens += conv.CompletionTokens
 	}
+
+	r.Conversation.Messages = append(r.Conversation.Messages, conv.Messages...)
+	r.Conversation.PromptTokens += r.InputTokens
+	r.Conversation.CompletionTokens += r.Conversation.CompletionTokens
+	r.Conversation.TotalTokens += r.Conversation.TotalTokens
 
 	return nil
 }

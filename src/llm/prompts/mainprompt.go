@@ -21,6 +21,15 @@ TOOL INVOCATION
 
 If you decide to execute a tool, you must emit a tool call whose name is one of the available tools.
 
+You are allowed to make AT MOST ONE tool call per response.
+
+If you need multiple actions, you must:
+1. Call one tool
+2. Wait for the tool result
+3. Continue in the next step
+
+Never include multiple tool calls in a single response.
+
 Tool calls must ONLY be used to execute tools.
 
 Never use a tool call to return messages or final results.

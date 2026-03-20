@@ -25,6 +25,7 @@ const (
 	MINIMAX_M2_5           OpenRouterModel = "minimax/minimax-m2.5"
 	MINIMAX_M2_7           OpenRouterModel = "minimax/minimax-m2.7"
 	CLAUDE_SONNET_4_6      OpenRouterModel = "anthropic/claude-sonnet-4.6"
+	CLAUDE_HAIKU_4_5       OpenRouterModel = "anthropic/claude-haiku-4.5"
 	GPT_5_1_CODEX_MINI     OpenRouterModel = "openai/gpt-5.1-codex-mini"
 	KIMI_K_2_5             OpenRouterModel = "moonshotai/kimi-k2.5"
 	LLAMA_3_3_70B_INSTRUCT OpenRouterModel = "meta-llama/llama-3.3-70b-instruct"
@@ -33,6 +34,7 @@ const (
 	GPT_5_NANO             OpenRouterModel = "openai/gpt-5-nano"
 	GLM_5                  OpenRouterModel = "z-ai/glm-5"
 	GPT_5_4_NANO           OpenRouterModel = "openai/gpt-5.4-nano"
+	DEEPSEEK_3_2           OpenRouterModel = "deepseek/deepseek-v3.2"
 )
 
 func NewOpenRouterProvider() *OpenRouterProvider {
@@ -193,12 +195,15 @@ func (p *OpenRouterProvider) SetModel(model OpenRouterModel, nitro bool) {
 }
 
 type Conversation struct {
-	Tools    []tools.Tool
-	Messages []Message
+	Tools            []tools.Tool
+	Messages         []Message
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(LLAMA_3_3_70B_INSTRUCT, true)
+	r.SetModel(MINIMAX_M2_7, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {
@@ -206,6 +211,9 @@ func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
 	}
 
 	prev.Messages = append(prev.Messages, value.Choices[0].Message)
+	prev.CompletionTokens = value.Usage.CompletionTokens
+	prev.PromptTokens = value.Usage.PromptTokens
+	prev.TotalTokens = value.Usage.TotalTokens
 
 	return prev, nil
 }
@@ -263,6 +271,8 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 
 		if len(finalResponse.Choices) > 0 {
 			retry = false
+		} else {
+			fmt.Println("retrying", string(body))
 		}
 	}
 

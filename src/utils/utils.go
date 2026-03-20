@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"zipcode/src/config"
 
 	"golang.org/x/term"
 )
 
 func PrintStruct[T any](value T) {
 	result, _ := json.Marshal(value)
-	fmt.Println(string(result))
+	fmt.Println(string(result) + "\n")
 }
 
 func GetTerminalSize() (int, int, error) {
@@ -32,4 +33,10 @@ func FlexGap(totalWidth int, subWidth int) string {
 	}
 
 	return gapText
+}
+
+func Log(a ...any) {
+	if config.HEADLESS {
+		fmt.Println(a...)
+	}
 }

@@ -65,7 +65,7 @@ func (a Question) View() string {
 
 	for i, option := range a.Options {
 		if i == a.Cursor {
-			optionText += fmt.Sprintf("-> %s\n", option)
+			optionText += fmt.Sprintf("❯ %s\n", option)
 			continue
 		}
 		optionText += fmt.Sprintf(" %s\n", option)

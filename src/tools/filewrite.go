@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -168,4 +171,121 @@ func RunFileWrite(input FileWriteInput) (FileWriteOutput, error) {
 		Success:      true,
 		BytesWritten: len(input.Content),
 	}, nil
+}
+
+type ParsedDiff struct {
+	FileName string
+	Hunks    []Hunk
+}
+
+type Hunk struct {
+	OldStart int
+	OldCount int
+	NewStart int
+	NewCount int
+	Lines    []DiffLine
+}
+
+type DiffLine struct {
+	Kind    DiffLineKind
+	Content string
+}
+
+type DiffLineKind string
+
+const (
+	DiffLineUnchanged DiffLineKind = "unchanged"
+	DiffLineRemoved   DiffLineKind = "removed"
+	DiffLineAdded     DiffLineKind = "added"
+)
+
+var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
+
+func ParseUnifiedDiff(input string) (ParsedDiff, error) {
+	var result ParsedDiff
+	var currentHunk *Hunk
+
+	scanner := bufio.NewScanner(strings.NewReader(input))
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		switch {
+		case strings.HasPrefix(line, "--- "):
+			// old filename, usually can ignore for now
+
+		case strings.HasPrefix(line, "+++ "):
+			result.FileName = strings.TrimPrefix(line, "+++ ")
+
+		case strings.HasPrefix(line, "@@ "):
+			matches := hunkHeaderRe.FindStringSubmatch(line)
+			if matches == nil {
+				return ParsedDiff{}, fmt.Errorf("invalid hunk header: %q", line)
+			}
+
+			oldStart, _ := strconv.Atoi(matches[1])
+			oldCount := 1
+			if matches[2] != "" {
+				oldCount, _ = strconv.Atoi(matches[2])
+			}
+
+			newStart, _ := strconv.Atoi(matches[3])
+			newCount := 1
+			if matches[4] != "" {
+				newCount, _ = strconv.Atoi(matches[4])
+			}
+
+			result.Hunks = append(result.Hunks, Hunk{
+				OldStart: oldStart,
+				OldCount: oldCount,
+				NewStart: newStart,
+				NewCount: newCount,
+				Lines:    []DiffLine{},
+			})
+			currentHunk = &result.Hunks[len(result.Hunks)-1]
+
+		case strings.HasPrefix(line, "+"):
+			if currentHunk == nil {
+				return ParsedDiff{}, fmt.Errorf("added line found outside hunk: %q", line)
+			}
+			currentHunk.Lines = append(currentHunk.Lines, DiffLine{
+				Kind:    DiffLineAdded,
+				Content: strings.TrimPrefix(line, "+"),
+			})
+
+		case strings.HasPrefix(line, "-"):
+			if currentHunk == nil {
+				return ParsedDiff{}, fmt.Errorf("removed line found outside hunk: %q", line)
+			}
+			currentHunk.Lines = append(currentHunk.Lines, DiffLine{
+				Kind:    DiffLineRemoved,
+				Content: strings.TrimPrefix(line, "-"),
+			})
+
+		case strings.HasPrefix(line, " "):
+			if currentHunk == nil {
+				return ParsedDiff{}, fmt.Errorf("context line found outside hunk: %q", line)
+			}
+			currentHunk.Lines = append(currentHunk.Lines, DiffLine{
+				Kind:    DiffLineUnchanged,
+				Content: strings.TrimPrefix(line, " "),
+			})
+
+		case line == `\ No newline at end of file`:
+			// optional metadata line, can ignore or store
+
+		case line == "":
+			// in unified diff, an empty context/add/remove line is still prefixed.
+			// a truly empty raw line usually can be ignored.
+
+		default:
+			return ParsedDiff{}, fmt.Errorf("unrecognized diff line: %q", line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return ParsedDiff{}, err
+	}
+
+	return result, nil
 }

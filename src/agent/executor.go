@@ -9,6 +9,8 @@ import (
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
 	"zipcode/src/utils"
+
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 type ResponseEventType int
@@ -23,6 +25,21 @@ type ResponseEvent struct {
 	Options   []string
 	EventType ResponseEventType
 	Message   string
+}
+
+type FileChangeType int
+
+const (
+	FileChange_Create FileChangeType = iota
+	FileChange_Append
+	FileChange_Patch
+)
+
+type FileChangeEvent struct {
+	FileName   string
+	ChangeType FileChangeType
+	Content    string
+	Patches    []tools.ParsedDiff
 }
 
 type Executor struct {
@@ -103,8 +120,7 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 		err := json.Unmarshal([]byte(response.Content), &content)
 
 		if err != nil {
-			// fmt.Println(err.Error())
-			// unmarshalling fails means the llm returned a plain string instead
+			// unmarshalling failed implies that the llm returned a plain string instead
 			// of a JSON response. We'll use the string as the executor response
 			e.pushEvent(Message, response.Content)
 			return response.Content, ExecutionCompleted, nil
@@ -138,13 +154,13 @@ func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
 		return
 	}
 
-	e.EventChannel <- ResponseEvent{
+	EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
 		EventType: eventType,
 		Message:   value,
-	}
+	})
 }
 
-func (e *Executor) pushEventWithQuestion(
+func (e *Executor) pushFileDiffEvent(
 	eventType ResponseEventType,
 	value string,
 	question string,
@@ -262,19 +278,50 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		}
 
 		var msg string
+		var patches []tools.ParsedDiff
 
-		if !config.HEADLESS {
-			e.pushEventWithQuestion(
-				Tool,
-				fileWriteInput.Message,
-				"Do you want to make this change?",
-				[]string{"Yes", "No", "Yes, and do not ask again for this session"},
-			)
+		for _, p := range fileWriteInput.Patches {
+			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+				A:        difflib.SplitLines(p.Target),
+				B:        difflib.SplitLines(p.Content),
+				FromFile: fileWriteInput.FilePath,
+				ToFile:   fileWriteInput.FilePath,
+				Context:  3,
+			})
 
-			msg = <-e.MessageChannel
-		} else {
-			msg = "Yes"
+			parsedDiff, _ := tools.ParseUnifiedDiff(diff)
+			patches = append(patches, parsedDiff)
 		}
+
+		var changeType FileChangeType
+
+		switch fileWriteInput.Operation {
+		case "append":
+			changeType = FileChange_Append
+			break
+		case "create":
+			changeType = FileChange_Create
+			break
+		case "patch":
+			changeType = FileChange_Patch
+			break
+		}
+
+		EventManager.WriteToChannel(FILE_DIFF_CHANNEL, FileChangeEvent{
+			FileName:   fileWriteInput.FilePath,
+			ChangeType: changeType,
+			Content:    fileWriteInput.Content,
+			Patches:    patches,
+		})
+
+		EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
+			Question:  "Do you want to make this change?",
+			Options:   []string{"Yes", "No", "Yes, and do not ask again for this session"},
+			EventType: Tool,
+			Message:   fileWriteInput.Message,
+		})
+
+		msg = EventManager.ReadFromChannel(AGENT_INPUT_CHANNEL).(string)
 
 		if msg == "Yes" || msg == "Yes, and do not ask again for this session" {
 			output, err := tools.RunFileWrite(fileWriteInput)

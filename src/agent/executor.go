@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"zipcode/src/config"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
@@ -106,13 +107,13 @@ type NormalResponseContent struct {
 	} `json:"data"`
 }
 
-func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResultStatus, error) {
+func (e *Executor) ProcessResponse(response llm.Message) ([]llm.Message, ExecutionResultStatus, error) {
 	if config.HEADLESS {
 		utils.PrintStruct(response)
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) == "" {
-		return `{"role":"user", "content":"Empty response, please retry"}`, ExecutionSucceeded, nil
+		return []llm.Message{{Role: "user", Content: "Empty response, please retry"}}, ExecutionSucceeded, nil
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) != "" {
@@ -123,30 +124,74 @@ func (e *Executor) ProcessResponse(response llm.Message) (string, ExecutionResul
 			// unmarshalling failed implies that the llm returned a plain string instead
 			// of a JSON response. We'll use the string as the executor response
 			e.pushEvent(Message, response.Content)
-			return response.Content, ExecutionCompleted, nil
+			return nil, ExecutionCompleted, nil
 		}
 
 		e.pushEvent(Message, content.Data.Message)
-		return content.Data.Message, ExecutionCompleted, nil
+		return nil, ExecutionCompleted, nil
 	}
 
 	if len(response.ToolCalls) > 0 {
-		response.Content = ""
-		tool := ToolCallResponseData{
-			Id:        response.ToolCalls[0].ID,
-			Name:      response.ToolCalls[0].Function.Name,
-			Arguments: json.RawMessage(response.ToolCalls[0].Function.Arguments),
-		}
-		request, err := e.ProcessToolCall(tool)
+		results, err := e.ProcessToolCallsParallel(response.ToolCalls)
 		if err != nil {
-			return "", ExecutionFailed, err
+			return nil, ExecutionFailed, err
 		}
 
-		requestJson, err := json.Marshal(request)
-		return string(requestJson), ExecutionSucceeded, nil
+		messages := make([]llm.Message, len(results))
+		for i, r := range results {
+			messages[i] = llm.Message{
+				Role:       r.Role,
+				Content:    r.Content,
+				ToolCallId: r.ToolCallID,
+			}
+		}
+		return messages, ExecutionSucceeded, nil
 	}
 
-	return "", ExecutionFailed, errors.New("invalid response type")
+	return nil, ExecutionFailed, errors.New("invalid response type")
+}
+
+func (e *Executor) ProcessToolCallsParallel(toolCalls []llm.ToolCall) ([]*ToolResultRequestData, error) {
+	type result struct {
+		index int
+		data  *ToolResultRequestData
+		err   error
+	}
+
+	ch := make(chan result, len(toolCalls))
+	var wg sync.WaitGroup
+	var interactiveMu sync.Mutex
+
+	for i, tc := range toolCalls {
+		wg.Add(1)
+		go func(idx int, tc llm.ToolCall) {
+			defer wg.Done()
+			tool := ToolCallResponseData{
+				Id:        tc.ID,
+				Name:      tc.Function.Name,
+				Arguments: json.RawMessage(tc.Function.Arguments),
+			}
+			// Serialize tools that require user interaction
+			if tc.Function.Name == "file_write" {
+				interactiveMu.Lock()
+				defer interactiveMu.Unlock()
+			}
+			data, err := e.ProcessToolCall(tool)
+			ch <- result{idx, data, err}
+		}(i, tc)
+	}
+
+	wg.Wait()
+	close(ch)
+
+	results := make([]*ToolResultRequestData, len(toolCalls))
+	for r := range ch {
+		if r.err != nil {
+			return nil, r.err
+		}
+		results[r.index] = r.data
+	}
+	return results, nil
 }
 
 func (e *Executor) pushEvent(eventType ResponseEventType, value string) {

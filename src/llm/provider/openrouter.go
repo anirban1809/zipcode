@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"zipcode/src/config"
 	"zipcode/src/tools"
 
 	"github.com/joho/godotenv"
@@ -14,32 +15,13 @@ import (
 
 type OpenRouterProvider struct {
 	ProviderId string
-	Model      OpenRouterModel
+	Model      config.OpenRouterModel
 	Tools      []tools.Tool
 }
 
-type OpenRouterModel string
-
-const (
-	GPT_5_2                OpenRouterModel = "openai/gpt-5.2"
-	MINIMAX_M2_5           OpenRouterModel = "minimax/minimax-m2.5"
-	MINIMAX_M2_7           OpenRouterModel = "minimax/minimax-m2.7"
-	CLAUDE_SONNET_4_6      OpenRouterModel = "anthropic/claude-sonnet-4.6"
-	CLAUDE_HAIKU_4_5       OpenRouterModel = "anthropic/claude-haiku-4.5"
-	GPT_5_1_CODEX_MINI     OpenRouterModel = "openai/gpt-5.1-codex-mini"
-	KIMI_K_2_5             OpenRouterModel = "moonshotai/kimi-k2.5"
-	LLAMA_3_3_70B_INSTRUCT OpenRouterModel = "meta-llama/llama-3.3-70b-instruct"
-	GLM_4_7                OpenRouterModel = "z-ai/glm-4.7"
-	QWEN_3_CODER_FLASH     OpenRouterModel = "qwen/qwen3-coder-flash"
-	GPT_5_NANO             OpenRouterModel = "openai/gpt-5-nano"
-	GLM_5                  OpenRouterModel = "z-ai/glm-5"
-	GPT_5_4_NANO           OpenRouterModel = "openai/gpt-5.4-nano"
-	DEEPSEEK_3_2           OpenRouterModel = "deepseek/deepseek-v3.2"
-)
-
 func NewOpenRouterProvider() *OpenRouterProvider {
 	return &OpenRouterProvider{
-		Model: MINIMAX_M2_5,
+		Model: config.MINIMAX_M2_5,
 		Tools: []tools.Tool{
 			tools.BashTool,
 			// tools.CodeSearchTool,
@@ -51,15 +33,15 @@ func NewOpenRouterProvider() *OpenRouterProvider {
 }
 
 type OpenRouterRequest struct {
-	Model               OpenRouterModel        `json:"model,omitempty"`
+	Model               config.OpenRouterModel `json:"model,omitempty"`
 	Messages            []Message              `json:"messages"`
 	Provider            *ProviderConfig        `json:"provider,omitempty"`
 	Temperature         float64                `json:"temperature,omitempty"`
 	TopP                *float64               `json:"top_p,omitempty"`
 	FrequencyPenalty    *float64               `json:"frequency_penalty,omitempty"`
 	PresencePenalty     *float64               `json:"presence_penalty,omitempty"`
-	MaxTokens           *int                   `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int                   `json:"max_completion_tokens,omitempty"`
+	MaxTokens           int                    `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int                    `json:"max_completion_tokens,omitempty"`
 	Stop                []string               `json:"stop,omitempty"`
 	Stream              bool                   `json:"stream,omitempty"`
 	User                string                 `json:"user,omitempty"`
@@ -186,9 +168,9 @@ type Usage struct {
 	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details"`
 }
 
-func (p *OpenRouterProvider) SetModel(model OpenRouterModel, nitro bool) {
+func (p *OpenRouterProvider) SetModel(model config.OpenRouterModel, nitro bool) {
 	if nitro {
-		p.Model = OpenRouterModel(fmt.Sprintf("%s:nitro", model))
+		p.Model = config.OpenRouterModel(fmt.Sprintf("%s:nitro", model))
 		return
 	}
 	p.Model = model
@@ -203,7 +185,7 @@ type Conversation struct {
 }
 
 func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(MINIMAX_M2_7, true)
+	r.SetModel(config.CurrentModel, true)
 	value, err := r.Complete(prev)
 
 	if err != nil {
@@ -231,10 +213,12 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 
 	for retry {
 		requestBody := OpenRouterRequest{
-			Model:    p.Model,
-			Messages: conversation.Messages,
-			Stream:   false,
-			Tools:    p.Tools,
+			Model:               p.Model,
+			Messages:            conversation.Messages,
+			Stream:              false,
+			Tools:               p.Tools,
+			MaxTokens:           8192,
+			MaxCompletionTokens: 2048,
 		}
 
 		value, err := json.Marshal(requestBody)

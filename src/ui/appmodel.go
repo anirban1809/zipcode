@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"zipcode/src/agent"
+	"zipcode/src/config"
 	"zipcode/src/ui/components"
 	"zipcode/src/utils"
 	"zipcode/src/workspace"
@@ -54,7 +55,7 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 		CommandsMenu:        components.CreateMenu(items, itemDescriptions),
 		Commands:            items,
 		CommandDescriptions: itemDescriptions,
-		StatusBar:           components.CreateStatusBar(workspace.RootPath, "minimax/minimax-m2.5"),
+		StatusBar:           components.CreateStatusBar(workspace.RootPath, string(config.CurrentModel)),
 		ActiveConversation:  "\n",
 	}
 }

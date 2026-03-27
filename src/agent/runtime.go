@@ -119,9 +119,7 @@ func (r *Runtime) Run(prompt string) error {
 	for r.Status != Idle {
 		lastResponseIndex := len(conv.Messages) - 1
 		lastResponse := conv.Messages[lastResponseIndex]
-		next, status, err := r.Executor.ProcessResponse(lastResponse)
-
-		// utils.Log(next + "\n")
+		messages, status, err := r.Executor.ProcessResponse(lastResponse)
 
 		if err != nil {
 			return err
@@ -132,14 +130,7 @@ func (r *Runtime) Run(prompt string) error {
 			break
 		}
 
-		var message llm.Message
-		err = json.Unmarshal([]byte(next), &message)
-
-		if err != nil {
-			return err
-		}
-
-		conv.Messages = append(conv.Messages, message)
+		conv.Messages = append(conv.Messages, messages...)
 		conv, err = r.LLM.Chat(conv)
 
 		r.InputTokens += conv.PromptTokens

@@ -9,6 +9,7 @@ import (
 	"os"
 	"zipcode/src/config"
 	"zipcode/src/tools"
+	"zipcode/src/utils"
 
 	"github.com/joho/godotenv"
 )
@@ -201,7 +202,6 @@ func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
 }
 
 func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterResponse, error) {
-	// fmt.Println("Running OpenRouter api call with: ", p.Model)
 
 	err := godotenv.Load()
 	if err != nil {
@@ -223,7 +223,9 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 
 		value, err := json.Marshal(requestBody)
 
-		// fmt.Println(string(value))
+		//debug code
+		utils.LogValue(conversation.Messages[len(conversation.Messages)-1])
+		//debug code
 
 		req, err := http.NewRequest(http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(value))
 

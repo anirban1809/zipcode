@@ -5,6 +5,7 @@ import (
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
+	"zipcode/src/utils"
 	"zipcode/src/workspace"
 )
 
@@ -120,6 +121,8 @@ func (r *Runtime) Run(prompt string) error {
 		lastResponseIndex := len(conv.Messages) - 1
 		lastResponse := conv.Messages[lastResponseIndex]
 		messages, status, err := r.Executor.ProcessResponse(lastResponse)
+
+		utils.Log(lastResponse.Content)
 
 		if err != nil {
 			return err

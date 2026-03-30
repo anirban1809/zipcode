@@ -24,4 +24,4 @@ const (
 	GPT_5_3_CODEX          OpenRouterModel = "openai/gpt-5.3-codex"
 )
 
-var CurrentModel = KIMI_K_2_5
+var CurrentModel = GPT_5_3_CODEX

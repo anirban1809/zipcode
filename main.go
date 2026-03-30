@@ -21,7 +21,7 @@ func main() {
 	// config.HEADLESS = true
 	// workspace := workspace.Load("/Users/anirban/Documents/Code/ln-api")
 	// runtime := agent.NewRuntime(&workspace)
-	// runtime.Run("Create a detailed description about all the API routes implemented in this project. Store this info in a file API_Routes.md")
+	// runtime.Run("Move the hardcoded Cognito config in src/handler.ts and Google OAuth credentials in src/util.ts into environment variables, and return a clear startup error if any required env var is missing")
 	// // runtime.Run("What version of typescript is being used in this project?")
 	// // runtime.Run("Add the above information in a file packages.md")
 	// // if err != nil {

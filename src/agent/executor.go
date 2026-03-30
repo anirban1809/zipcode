@@ -132,20 +132,29 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]llm.Message, Executi
 	}
 
 	if len(response.ToolCalls) > 0 {
-		results, err := e.ProcessToolCallsParallel(response.ToolCalls)
-		if err != nil {
-			return nil, ExecutionFailed, err
+		results := []llm.Message{}
+
+		for _, toolCall := range response.ToolCalls {
+			tool := ToolCallResponseData{
+				Id:        toolCall.ID,
+				Name:      toolCall.Function.Name,
+				Arguments: json.RawMessage(toolCall.Function.Arguments),
+			}
+			result, err := e.ProcessToolCall(tool)
+
+			if err != nil {
+				return nil, ExecutionFailed, err
+			}
+
+			results = append(results, llm.Message{
+				Role:       result.Role,
+				Content:    result.Content,
+				ToolCallId: result.ToolCallID,
+			})
+
 		}
 
-		messages := make([]llm.Message, len(results))
-		for i, r := range results {
-			messages[i] = llm.Message{
-				Role:       r.Role,
-				Content:    r.Content,
-				ToolCallId: r.ToolCallID,
-			}
-		}
-		return messages, ExecutionSucceeded, nil
+		return results, ExecutionSucceeded, nil
 	}
 
 	return nil, ExecutionFailed, errors.New("invalid response type")
@@ -352,21 +361,25 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			break
 		}
 
-		EventManager.WriteToChannel(FILE_DIFF_CHANNEL, FileChangeEvent{
-			FileName:   fileWriteInput.FilePath,
-			ChangeType: changeType,
-			Content:    fileWriteInput.Content,
-			Patches:    patches,
-		})
+		if !config.HEADLESS {
+			EventManager.WriteToChannel(FILE_DIFF_CHANNEL, FileChangeEvent{
+				FileName:   fileWriteInput.FilePath,
+				ChangeType: changeType,
+				Content:    fileWriteInput.Content,
+				Patches:    patches,
+			})
 
-		EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
-			Question:  "Do you want to make this change?",
-			Options:   []string{"Yes", "No", "Yes, and do not ask again for this session"},
-			EventType: Tool,
-			Message:   fileWriteInput.Message,
-		})
+			EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
+				Question:  "Do you want to make this change?",
+				Options:   []string{"Yes", "No", "Yes, and do not ask again for this session"},
+				EventType: Tool,
+				Message:   fileWriteInput.Message,
+			})
 
-		msg = EventManager.ReadFromChannel(AGENT_INPUT_CHANNEL).(string)
+			msg = EventManager.ReadFromChannel(AGENT_INPUT_CHANNEL).(string)
+		} else {
+			msg = "Yes"
+		}
 
 		if msg == "Yes" || msg == "Yes, and do not ask again for this session" {
 			output, err := tools.RunFileWrite(fileWriteInput)

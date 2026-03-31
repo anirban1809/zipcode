@@ -203,10 +203,7 @@ func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
 
 func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterResponse, error) {
 
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Failed to load env file")
-	}
+	godotenv.Load()
 
 	retry := true
 	var finalResponse OpenRouterResponse

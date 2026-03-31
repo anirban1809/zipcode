@@ -352,13 +352,13 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		switch fileWriteInput.Operation {
 		case "append":
 			changeType = FileChange_Append
-			break
+
 		case "create":
 			changeType = FileChange_Create
-			break
+
 		case "patch":
 			changeType = FileChange_Patch
-			break
+
 		}
 
 		if !config.HEADLESS {

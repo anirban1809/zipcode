@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"zipcode/src/ui"
 	"zipcode/src/workspace"
 
@@ -10,7 +11,13 @@ import (
 
 func main() {
 	ui.ClearScreen()
-	workspace := workspace.Load("/Users/anirban/Documents/Code/ln-api")
+	dir, err := os.Getwd()
+
+	if err != nil {
+		log.Fatal("Failed to get current directory. Error: ", err.Error())
+	}
+
+	workspace := workspace.Load(dir)
 
 	p := tea.NewProgram(ui.Iniaitalize(&workspace), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

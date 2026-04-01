@@ -30,7 +30,7 @@ var FileWriteTool = Tool{
 				"operation": {
 					Type:        "string",
 					Description: "Type of file write operation",
-					Enum: []interface{}{
+					Enum: []any{
 						"create",
 						"replace",
 						"append",
@@ -104,16 +104,12 @@ func RunFileWrite(input FileWriteInput) (FileWriteOutput, error) {
 			return FileWriteOutput{}, err
 		}
 
-		break
-
 	case "replace":
 		err := os.WriteFile(input.FilePath, []byte(input.Content), 0644)
 
 		if err != nil {
 			return FileWriteOutput{}, err
 		}
-
-		break
 
 	case "append":
 		f, err := os.OpenFile(input.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

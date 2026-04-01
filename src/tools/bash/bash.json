@@ -1,0 +1,29 @@
+{
+  "type": "function",
+  "function": {
+    "name": "bash_tool",
+    "description": "Execute shell commands in the workspace environment. Used for inspecting the filesystem, building projects, running tests, or executing scripts.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "A message describing the command being executed by the llm"
+        },
+        "command": {
+          "type": "string",
+          "description": "the command to be executed"
+        },
+        "working_directory": {
+          "type": "string",
+          "description": "The current working directory"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "description": "seconds after which the command will be terminated automatically"
+        }
+      },
+      "required": ["message", "command"]
+    }
+  }
+}

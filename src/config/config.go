@@ -25,3 +25,6 @@ const (
 )
 
 var CurrentModel = MINIMAX_M2_7
+
+var INTERNAL_TOOL_PATH = "./src/tools"
+var EXTERNAL_TOOL_PATH = "~/.zipcode/tools"

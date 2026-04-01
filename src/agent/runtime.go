@@ -2,6 +2,9 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"zipcode/src/config"
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
@@ -60,6 +63,31 @@ func (r Runtime) GetExecutorMessageChannel() chan string {
 	return r.Executor.MessageChannel
 }
 
+func (r *Runtime) loadTools(path string) error {
+	entries, err := os.ReadDir(path)
+
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			content, err := os.ReadFile(fmt.Sprintf("%s/%s/%s.json", path, entry.Name(), entry.Name()))
+			if err != nil {
+				fmt.Println("Error reading file:", err)
+				continue
+			}
+
+			var tool tools.Tool
+			err = json.Unmarshal([]byte(content), &tool)
+
+			r.Tools = append(r.Tools, tool)
+		}
+	}
+
+	return nil
+}
+
 func (r *Runtime) Run(prompt string) error {
 
 	r.Status = Running
@@ -73,13 +101,15 @@ func (r *Runtime) Run(prompt string) error {
 		},
 	}
 
-	taskRequestString, err := json.Marshal(taskRequest)
+	userPrompt, err := json.Marshal(taskRequest)
 
 	if err != nil {
 		return err
 	}
 
 	var conv *llm.Conversation
+	r.loadTools(config.INTERNAL_TOOL_PATH)
+	r.loadTools(config.EXTERNAL_TOOL_PATH)
 
 	if len(r.Conversation.Messages) == 0 {
 		initialConversation := llm.Conversation{
@@ -89,24 +119,18 @@ func (r *Runtime) Run(prompt string) error {
 					Role:    "system",
 				},
 				{
-					Content: string(taskRequestString),
+					Content: string(userPrompt),
 					Role:    "user",
 				},
 			},
-			Tools: []tools.Tool{
-				tools.BashTool,
-				tools.CodeSearchTool,
-				tools.FileReadTool,
-				tools.FileSearchTool,
-				tools.FileWriteTool,
-			},
+			Tools: r.Tools,
 		}
 
 		conv, err = r.LLM.Chat(&initialConversation)
 	} else {
 
 		r.Conversation.Messages = append(r.Conversation.Messages, llm.Message{
-			Content: string(taskRequestString),
+			Content: string(userPrompt),
 			Role:    "user",
 		})
 

@@ -34,7 +34,7 @@ func main() {
 
 	// workspace := workspace.Load("/Users/anirban/Documents/Code/example-api")
 	// runtime := agent.NewRuntime(&workspace)
-	// err := runtime.Run("Create a commit of the recent changes with a descriptive commit message, no need to ask for approval, proceed with the commit")
+	// err := runtime.Run("Find the index.ts file, Read it and create a summary")
 	// // runtime.Run("What version of typescript is being used in this project?")
 	// // runtime.Run("Add the above information in a file packages.md")
 	// if err != nil {

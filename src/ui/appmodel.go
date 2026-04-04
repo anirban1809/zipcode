@@ -119,6 +119,16 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return a, tea.Quit
+		case "w":
+			if a.FileChangeViewer.Visible {
+				a.FileChangeViewer.ScrollUp()
+				return a, tea.Batch(cmds...)
+			}
+		case "s":
+			if a.FileChangeViewer.Visible {
+				a.FileChangeViewer.ScrollDown()
+				return a, tea.Batch(cmds...)
+			}
 		case "enter":
 			if strings.HasPrefix(a.Prompt.Value(), "/") {
 				a.CommandsMenu.SetVisible(false)

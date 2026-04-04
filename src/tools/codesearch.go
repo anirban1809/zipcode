@@ -54,7 +54,7 @@ func RunCodeSearch(input CodeSearchInput) (CodeSearchOutput, error) {
 
 	fmt.Println(command)
 
-	result, err := RunBashCommand(command, input.Path)
+	result, err := RunBashCommand(command)
 
 	if err != nil {
 		return CodeSearchOutput{}, err

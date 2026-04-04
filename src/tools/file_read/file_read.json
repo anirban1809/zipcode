@@ -1,0 +1,24 @@
+{
+  "type": "function",
+  "function": {
+    "name": "file_read",
+    "description": "Read the contents of a file from the workspace. Used to inspect code before making modifications. Avoid reading extremely large files unless necessary.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Explanation of why the file needs to be read"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to the file that should be read"
+        }
+      },
+      "required": [
+        "message",
+        "path"
+      ]
+    }
+  }
+}

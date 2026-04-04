@@ -22,20 +22,41 @@ var (
 )
 
 type FileChangeViewer struct {
-	FileName   string
-	ChangeType string
-	Content    string
-	Patches    []tools.ParsedDiff
-	Visible    bool
+	FileName     string
+	ChangeType   string
+	Content      string
+	Patches      []tools.ParsedDiff
+	Visible      bool
+	ScrollOffset int
+	MaxVisible   int
 }
 
 func CreateFileChangeViewer(fileName, changeType, content string, patches []tools.ParsedDiff) FileChangeViewer {
 	return FileChangeViewer{
-		FileName:   fileName,
-		ChangeType: changeType,
-		Content:    content,
-		Patches:    patches,
-		Visible:    true,
+		FileName:     fileName,
+		ChangeType:   changeType,
+		Content:      content,
+		Patches:      patches,
+		Visible:      true,
+		ScrollOffset: 0,
+		MaxVisible:   20,
+	}
+}
+
+func (f *FileChangeViewer) ScrollDown() {
+	lines := f.getLines()
+	max := len(lines) - f.MaxVisible
+	if max < 0 {
+		max = 0
+	}
+	if f.ScrollOffset < max {
+		f.ScrollOffset++
+	}
+}
+
+func (f *FileChangeViewer) ScrollUp() {
+	if f.ScrollOffset > 0 {
+		f.ScrollOffset--
 	}
 }
 
@@ -50,36 +71,28 @@ func renderDiffLine(lineNum int, kind tools.DiffLineKind, content string) string
 	}
 }
 
-func (f FileChangeViewer) View() string {
-	if !f.Visible {
-		return ""
-	}
-
-	var sb strings.Builder
-
-	sb.WriteString("\n")
-	sb.WriteString(diffFileLabel.Render(f.FileName) + "  " + diffOpBadge.Render(f.ChangeType) + "\n")
-	sb.WriteString(diffUnchanged.Render(strings.Repeat("─", 60)) + "\n")
+func (f FileChangeViewer) getLines() []string {
+	var lines []string
 
 	switch f.ChangeType {
 	case "patch":
 		for _, diff := range f.Patches {
 			for _, hunk := range diff.Hunks {
 				hunkHeader := fmt.Sprintf("  @@ -%d,%d +%d,%d @@", hunk.OldStart, hunk.OldCount, hunk.NewStart, hunk.NewCount)
-				sb.WriteString(diffHunkSep.Render(hunkHeader) + "\n")
+				lines = append(lines, diffHunkSep.Render(hunkHeader))
 
 				oldLine := hunk.OldStart
 				newLine := hunk.NewStart
 				for _, line := range hunk.Lines {
 					switch line.Kind {
 					case tools.DiffLineAdded:
-						sb.WriteString(renderDiffLine(newLine, line.Kind, line.Content) + "\n")
+						lines = append(lines, renderDiffLine(newLine, line.Kind, line.Content))
 						newLine++
 					case tools.DiffLineRemoved:
-						sb.WriteString(renderDiffLine(oldLine, line.Kind, line.Content) + "\n")
+						lines = append(lines, renderDiffLine(oldLine, line.Kind, line.Content))
 						oldLine++
 					default:
-						sb.WriteString(renderDiffLine(newLine, line.Kind, line.Content) + "\n")
+						lines = append(lines, renderDiffLine(newLine, line.Kind, line.Content))
 						oldLine++
 						newLine++
 					}
@@ -88,19 +101,47 @@ func (f FileChangeViewer) View() string {
 		}
 
 	case "create", "append", "replace":
-		lines := strings.Split(f.Content, "\n")
-		limit := len(lines)
-		if limit > 30 {
-			limit = 30
-		}
-		for i, line := range lines[:limit] {
-			sb.WriteString(renderDiffLine(i+1, tools.DiffLineAdded, line) + "\n")
-		}
-		if len(lines) > 30 {
-			sb.WriteString(diffUnchanged.Render(fmt.Sprintf("  ... %d more lines", len(lines)-30)) + "\n")
+		contentLines := strings.Split(f.Content, "\n")
+		for i, line := range contentLines {
+			lines = append(lines, renderDiffLine(i+1, tools.DiffLineAdded, line))
 		}
 	}
 
+	return lines
+}
+
+func (f FileChangeViewer) View() string {
+	if !f.Visible {
+		return ""
+	}
+
+	lines := f.getLines()
+	total := len(lines)
+
+	start := f.ScrollOffset
+	if start > total {
+		start = total
+	}
+	end := start + f.MaxVisible
+	if end > total {
+		end = total
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(diffFileLabel.Render(f.FileName) + "  " + diffOpBadge.Render(f.ChangeType) + "\n")
 	sb.WriteString(diffUnchanged.Render(strings.Repeat("─", 60)) + "\n")
+
+	for _, line := range lines[start:end] {
+		sb.WriteString(line + "\n")
+	}
+
+	sb.WriteString(diffUnchanged.Render(strings.Repeat("─", 60)) + "\n")
+
+	if total > f.MaxVisible {
+		indicator := fmt.Sprintf("  lines %d-%d of %d  (w/s to scroll)", start+1, end, total)
+		sb.WriteString(diffUnchanged.Render(indicator) + "\n")
+	}
+
 	return sb.String()
 }

@@ -200,8 +200,7 @@ func (e *Executor) GetToolCallCommand(input ToolCallResponseData) (string, error
 		return "", errors.New("failed to get tool")
 	}
 
-	name := strings.ReplaceAll(input.Name, "_tool", "")
-	command := fmt.Sprintf("python3 %s/%s/%s.py", toolPath, name, name)
+	command := fmt.Sprintf("python3 %s/%s/%s.py", toolPath, input.Name, input.Name)
 
 	for _, param := range tool.Function.Parameters.Required {
 		var args map[string]any
@@ -235,7 +234,9 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			return nil, err
 		}
 
-		result, err := tools.RunBashCommand(command, args["working_directory"].(string))
+		e.pushEvent(Tool, args["message"].(string))
+
+		result, err := tools.RunBashCommand(command)
 		utils.Log(result)
 
 		if err != nil {
@@ -248,38 +249,6 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			Role:       "tool",
 			Content:    string(result),
 		}, nil
-
-	// case "bash_tool":
-	// 	var bashInput tools.BashInput
-	// 	err := json.Unmarshal(input.Arguments, &bashInput)
-	// 	e.pushEvent(Tool, fmt.Sprintf("%s (%s)", bashInput.Message, bashInput.Command))
-
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	command := fmt.Sprintf(
-	// 		"python3 %s/bash/bash.py --message \"%s\" --command \"%s\"",
-	// 		config.INTERNAL_TOOL_PATH,
-	// 		bashInput.Message,
-	// 		strings.ReplaceAll(
-	// 			bashInput.Command, "\"", "\\\"",
-	// 		),
-	// 	)
-
-	// 	utils.Log(command)
-	// 	result, err := tools.RunBashCommand(command, bashInput.WorkingDirectory)
-	// 	utils.Log(result)
-
-	// 	if err != nil {
-	// 		utils.Log(err.Error())
-	// 		return nil, err
-	// 	}
-
-	// 	return &ToolResultRequestData{
-	// 		ToolCallID: input.Id,
-	// 		Role:       "tool",
-	// 		Content:    string(result),
-	// 	}, nil
 
 	case "file_write":
 		var fileWriteInput tools.FileWriteInput

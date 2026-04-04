@@ -54,7 +54,7 @@ type grepOutput struct {
 	LineNumber int `json:"line_number"`
 }
 
-func RunBashCommand(command string, dir string) (string, error) {
+func RunBashCommand(command string) (string, error) {
 	var cmd *exec.Cmd
 
 	if strings.HasPrefix(command, "bash") || strings.HasPrefix(command, "sh") {
@@ -63,10 +63,7 @@ func RunBashCommand(command string, dir string) (string, error) {
 		cmd = exec.Command("bash", "-c", command)
 	}
 
-	if dir != "" {
-		cmd.Dir = dir
-	}
-
+	cmd.Dir = "."
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

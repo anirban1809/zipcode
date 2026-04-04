@@ -1,3 +1,4 @@
+// this file in deprecated
 package tools
 
 import (

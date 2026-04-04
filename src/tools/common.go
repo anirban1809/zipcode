@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os/exec"
 	"strings"
 )
@@ -54,19 +55,27 @@ type grepOutput struct {
 }
 
 func RunBashCommand(command string, dir string) (string, error) {
-	cmd := exec.Command("bash", "-c", command)
+	var cmd *exec.Cmd
+
+	if strings.HasPrefix(command, "bash") || strings.HasPrefix(command, "sh") {
+		cmd = exec.Command(command)
+	} else {
+		cmd = exec.Command("bash", "-c", command)
+	}
 
 	if dir != "" {
 		cmd.Dir = dir
 	}
 
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	err := cmd.Run()
 
 	if err != nil {
-		return "", err
+		return "", errors.New(stderr.String())
 	}
 
 	return stdout.String(), nil

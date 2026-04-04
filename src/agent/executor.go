@@ -10,6 +10,8 @@ import (
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
 	"zipcode/src/utils"
+
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 type ResponseEventType int
@@ -161,39 +163,83 @@ func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
 	})
 }
 
-func (e *Executor) loadTools(toolsLocation string) ([]string, error) {
-	tools := []string{}
-	entries, err := os.ReadDir(toolsLocation)
+func GetTool(path string, toolname string) (tools.Tool, error) {
+	name := strings.ReplaceAll(toolname, "_tool", "")
+	content, err := os.ReadFile(fmt.Sprintf("%s/%s/%s.json", path, name, name))
 
 	if err != nil {
-		return nil, errors.New("Failed to load tools")
+		return tools.Tool{}, errors.New("failed to read tool manifest")
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			tools = append(tools, entry.Name())
+	var tool tools.Tool
+	err = json.Unmarshal([]byte(content), &tool)
+
+	if err != nil {
+		return tools.Tool{}, errors.New("invalid tool manifest")
+	}
+
+	return tool, nil
+}
+
+func (e *Executor) GetToolCallCommand(input ToolCallResponseData) (string, error) {
+	internaltool, err1 := GetTool(config.INTERNAL_TOOL_PATH, input.Name)
+	externaltool, err2 := GetTool(config.EXTERNAL_TOOL_PATH, input.Name)
+	toolPath := ""
+
+	var tool tools.Tool
+
+	if err1 != nil {
+		tool = externaltool
+		toolPath = config.EXTERNAL_TOOL_PATH
+	} else if err2 != nil {
+		tool = internaltool
+		toolPath = config.INTERNAL_TOOL_PATH
+	}
+
+	if err1 != nil && err2 != nil {
+		return "", errors.New("failed to get tool")
+	}
+
+	name := strings.ReplaceAll(input.Name, "_tool", "")
+	command := fmt.Sprintf("python3 %s/%s/%s.py", toolPath, name, name)
+
+	for _, param := range tool.Function.Parameters.Required {
+		var args map[string]any
+
+		if err := json.Unmarshal(input.Arguments, &args); err != nil {
+			fmt.Println("Error:", err)
 		}
+
+		command = fmt.Sprintf("%s --%s \"%s\"", command, param, strings.ReplaceAll(args[param].(string), "\"", "\\\""))
 	}
 
-	return tools, nil
+	// command = strings.ReplaceAll(command, "\"", "\\\"")
+	// command = strings.ReplaceAll(command, "'", "\\'")
+
+	return command, nil
 }
 
 func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultRequestData, error) {
 	switch input.Name {
-	case "bash_tool":
-		var bashInput tools.BashInput
-		err := json.Unmarshal(input.Arguments, &bashInput)
-
-		e.pushEvent(Tool, fmt.Sprintf("%s (%s)", bashInput.Message, bashInput.Command))
-
+	default:
+		command, err := e.GetToolCallCommand(input)
 		if err != nil {
 			return nil, err
 		}
 
-		command := fmt.Sprintf("python3 ./src/tools/bash/bash.py --message \"%s\" --command \"%s\"", bashInput.Message, bashInput.Command)
-		result, err := tools.RunBashCommand(command, bashInput.WorkingDirectory)
+		utils.Log(command)
+
+		var args map[string]any
+
+		if err := json.Unmarshal(input.Arguments, &args); err != nil {
+			return nil, err
+		}
+
+		result, err := tools.RunBashCommand(command, args["working_directory"].(string))
+		utils.Log(result)
 
 		if err != nil {
+			utils.Log(err.Error())
 			return nil, err
 		}
 
@@ -203,137 +249,121 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			Content:    string(result),
 		}, nil
 
-		// case "file_search":
-		// 	var fileSearchInput tools.FileSearchInput
-		// 	err := json.Unmarshal(input.Arguments, &fileSearchInput)
+	// case "bash_tool":
+	// 	var bashInput tools.BashInput
+	// 	err := json.Unmarshal(input.Arguments, &bashInput)
+	// 	e.pushEvent(Tool, fmt.Sprintf("%s (%s)", bashInput.Message, bashInput.Command))
 
-		// 	e.pushEvent(Tool, fileSearchInput.Message)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	command := fmt.Sprintf(
+	// 		"python3 %s/bash/bash.py --message \"%s\" --command \"%s\"",
+	// 		config.INTERNAL_TOOL_PATH,
+	// 		bashInput.Message,
+	// 		strings.ReplaceAll(
+	// 			bashInput.Command, "\"", "\\\"",
+	// 		),
+	// 	)
 
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
+	// 	utils.Log(command)
+	// 	result, err := tools.RunBashCommand(command, bashInput.WorkingDirectory)
+	// 	utils.Log(result)
 
-		// 	output, err := tools.RunFileSearch(fileSearchInput)
+	// 	if err != nil {
+	// 		utils.Log(err.Error())
+	// 		return nil, err
+	// 	}
 
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
+	// 	return &ToolResultRequestData{
+	// 		ToolCallID: input.Id,
+	// 		Role:       "tool",
+	// 		Content:    string(result),
+	// 	}, nil
 
-		// 	value, err := json.Marshal(output)
+	case "file_write":
+		var fileWriteInput tools.FileWriteInput
+		err := json.Unmarshal(input.Arguments, &fileWriteInput)
+		if err != nil {
+			return nil, err
+		}
 
-		// 	return &ToolResultRequestData{
-		// 		ToolCallID: input.Id,
-		// 		Role:       "tool",
-		// 		Content:    string(value),
-		// 	}, nil
+		var msg string
+		var patches []tools.ParsedDiff
 
-		// case "file_read":
-		// 	var fileReadInput tools.FileReadInput
-		// 	err := json.Unmarshal(input.Arguments, &fileReadInput)
+		for _, p := range fileWriteInput.Patches {
+			diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+				A:        difflib.SplitLines(p.Target),
+				B:        difflib.SplitLines(p.Content),
+				FromFile: fileWriteInput.FilePath,
+				ToFile:   fileWriteInput.FilePath,
+				Context:  3,
+			})
 
-		// 	e.pushEvent(Tool, fileReadInput.Message)
+			parsedDiff, _ := tools.ParseUnifiedDiff(diff)
+			patches = append(patches, parsedDiff)
+		}
 
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
+		var changeType FileChangeType
 
-		// 	output, err := tools.RunFileRead(fileReadInput)
+		switch fileWriteInput.Operation {
+		case "append":
+			changeType = FileChange_Append
 
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
+		case "create":
+			changeType = FileChange_Create
 
-		// 	value, err := json.Marshal(output)
+		case "patch":
+			changeType = FileChange_Patch
 
-		// 	return &ToolResultRequestData{
-		// 		ToolCallID: input.Id,
-		// 		Role:       "tool",
-		// 		Content:    string(value),
-		// 	}, nil
+		}
 
-		// case "file_write":
-		// 	var fileWriteInput tools.FileWriteInput
-		// 	err := json.Unmarshal(input.Arguments, &fileWriteInput)
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
+		if !config.HEADLESS {
+			EventManager.WriteToChannel(FILE_DIFF_CHANNEL, FileChangeEvent{
+				FileName:   fileWriteInput.FilePath,
+				ChangeType: changeType,
+				Content:    fileWriteInput.Content,
+				Patches:    patches,
+			})
 
-		// 	var msg string
-		// 	var patches []tools.ParsedDiff
+			EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
+				Question:  "Do you want to make this change?",
+				Options:   []string{"Yes", "No", "Yes, and do not ask again for this session"},
+				EventType: Tool,
+				Message:   fileWriteInput.Message,
+			})
 
-		// 	for _, p := range fileWriteInput.Patches {
-		// 		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-		// 			A:        difflib.SplitLines(p.Target),
-		// 			B:        difflib.SplitLines(p.Content),
-		// 			FromFile: fileWriteInput.FilePath,
-		// 			ToFile:   fileWriteInput.FilePath,
-		// 			Context:  3,
-		// 		})
+			msg = EventManager.ReadFromChannel(AGENT_INPUT_CHANNEL).(string)
+		} else {
+			msg = "Yes"
+		}
 
-		// 		parsedDiff, _ := tools.ParseUnifiedDiff(diff)
-		// 		patches = append(patches, parsedDiff)
-		// 	}
+		if msg == "Yes" || msg == "Yes, and do not ask again for this session" {
+			output, err := tools.RunFileWrite(fileWriteInput)
 
-		// 	var changeType FileChangeType
+			if err != nil {
+				return nil, err
+			}
+			value, err := json.Marshal(output)
 
-		// 	switch fileWriteInput.Operation {
-		// 	case "append":
-		// 		changeType = FileChange_Append
+			return &ToolResultRequestData{
+				ToolCallID: input.Id,
+				Role:       "tool",
+				Content:    string(value),
+			}, nil
+		}
 
-		// 	case "create":
-		// 		changeType = FileChange_Create
-
-		// 	case "patch":
-		// 		changeType = FileChange_Patch
-
-		// 	}
-
-		// 	if !config.HEADLESS {
-		// 		EventManager.WriteToChannel(FILE_DIFF_CHANNEL, FileChangeEvent{
-		// 			FileName:   fileWriteInput.FilePath,
-		// 			ChangeType: changeType,
-		// 			Content:    fileWriteInput.Content,
-		// 			Patches:    patches,
-		// 		})
-
-		// 		EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
-		// 			Question:  "Do you want to make this change?",
-		// 			Options:   []string{"Yes", "No", "Yes, and do not ask again for this session"},
-		// 			EventType: Tool,
-		// 			Message:   fileWriteInput.Message,
-		// 		})
-
-		// 		msg = EventManager.ReadFromChannel(AGENT_INPUT_CHANNEL).(string)
-		// 	} else {
-		// 		msg = "Yes"
-		// 	}
-
-		// 	if msg == "Yes" || msg == "Yes, and do not ask again for this session" {
-		// 		output, err := tools.RunFileWrite(fileWriteInput)
-
-		// 		if err != nil {
-		// 			return nil, err
-		// 		}
-		// 		value, err := json.Marshal(output)
-
-		// 		return &ToolResultRequestData{
-		// 			ToolCallID: input.Id,
-		// 			Role:       "tool",
-		// 			Content:    string(value),
-		// 		}, nil
-		// 	}
-
-		// 	return &ToolResultRequestData{
-		// 		ToolCallID: input.Id,
-		// 		Role:       "tool",
-		// 		Content:    string("Action denied by user"),
-		// 	}, nil
+		return &ToolResultRequestData{
+			ToolCallID: input.Id,
+			Role:       "tool",
+			Content:    string("Action denied by user"),
+		}, nil
 
 	}
 
-	return &ToolResultRequestData{
-		ToolCallID: input.Id,
-		Role:       "tool",
-		Content:    fmt.Sprintf(`{"message":"invalid tool name %s, please retry"}`, input.Name),
-	}, nil
+	// return &ToolResultRequestData{
+	// 	ToolCallID: input.Id,
+	// 	Role:       "tool",
+	// 	Content:    fmt.Sprintf(`{"message":"invalid tool name %s, please retry"}`, input.Name),
+	// }, nil
 }

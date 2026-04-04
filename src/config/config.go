@@ -24,7 +24,7 @@ const (
 	GPT_5_3_CODEX          OpenRouterModel = "openai/gpt-5.3-codex"
 )
 
-var CurrentModel = MINIMAX_M2_7
+var CurrentModel = GPT_5_4
 
-var INTERNAL_TOOL_PATH = "./src/tools"
+var INTERNAL_TOOL_PATH = "/Users/anirban/Documents/Code/zipcode/src/tools"
 var EXTERNAL_TOOL_PATH = "~/.zipcode/tools"

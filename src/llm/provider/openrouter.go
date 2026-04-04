@@ -22,14 +22,11 @@ type OpenRouterProvider struct {
 
 func NewOpenRouterProvider() *OpenRouterProvider {
 	return &OpenRouterProvider{
-		Model: config.MINIMAX_M2_5,
-		Tools: []tools.Tool{
-			tools.BashTool,
-			// tools.CodeSearchTool,
-			tools.FileReadTool,
-			tools.FileSearchTool,
-			tools.FileWriteTool,
-		},
+		// Model: config.MINIMAX_M2_5,
+		// Tools: []tools.Tool{
+		// 	// tools.BashTool,
+		// 	// tools.FileWriteTool,
+		// },
 	}
 }
 
@@ -213,7 +210,7 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 			Model:               p.Model,
 			Messages:            conversation.Messages,
 			Stream:              false,
-			Tools:               p.Tools,
+			Tools:               conversation.Tools,
 			MaxTokens:           8192,
 			MaxCompletionTokens: 2048,
 		}

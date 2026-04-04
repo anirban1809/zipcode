@@ -1,53 +1,25 @@
 import json
 import subprocess
-import shlex
 import argparse
 
 
 def run() -> None:
-    """
-    Executes a bash tool call based on the provided payload.
-
-    Expected payload structure:
-    {
-        "message": str,
-        "command": str,
-        "working_directory": str (optional),
-        "timeout_seconds": int (optional)
-    }
-    """
-
     parser = argparse.ArgumentParser()
-
-    parser.add_argument("--message", type=str)
-    parser.add_argument("--command", type=str)
-    parser.add_argument("-w","--working_directory", type=str, default=".")
-    parser.add_argument("-t","--timeout_seconds", type=int, default=10)
+    parser.add_argument("--message", type=str, required=True)
+    parser.add_argument("--command", type=str, required=True)
+    parser.add_argument("--working_directory", type=str, default=".")
+    parser.add_argument("--timeout_seconds", type=int, default=10)
 
     args = parser.parse_args()
 
-    # Validate required fields
-    if "message" not in args or "command" not in args:
-        print({
-            "ok": False,
-            "error": "Missing required fields: message, command"
-        })
-
-        exit(1)
-
-    command = args.command # pyright: ignore[reportIndexIssue]
-    cwd = args.working_directory
-    timeout = args.timeout_seconds
-
+    print(args.command.replace('"',"\""))
     try:
-        # Use shell=False with shlex.split for safety
         result = subprocess.run(
-            shlex.split(command),
-            shell=False,
-            cwd=cwd,
+            ["bash", "-lc", args.command.replace('"',"\"")],
+            cwd=args.working_directory,
             capture_output=True,
             text=True,
-            timeout=timeout
+            timeout=args.timeout_seconds
         )
 
         print(json.dumps({
@@ -61,8 +33,8 @@ def run() -> None:
         print(json.dumps({
             "ok": False,
             "error": "Command timed out",
-            "stdout": e.stdout,
-            "stderr": e.stderr
+            "stdout": e.stdout or "",
+            "stderr": e.stderr or ""
         }))
 
     except Exception as e:

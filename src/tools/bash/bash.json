@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "bash_tool",
-    "description": "Execute shell commands in the workspace environment. Used for inspecting the filesystem, building projects, running tests, or executing scripts.",
+    "description": "Execute shell commands in the workspace environment. Used for inspecting the filesystem, building projects, running tests, or executing scripts. ONLY use pure bash scripts, do not use python code inside of the bash scripts",
     "parameters": {
       "type": "object",
       "properties": {
@@ -23,7 +23,7 @@
           "description": "seconds after which the command will be terminated automatically"
         }
       },
-      "required": ["message", "command"]
+      "required": ["message", "command", "working_directory"]
     }
   }
 }

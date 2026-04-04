@@ -36,12 +36,16 @@ type Runtime struct {
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
-	return Runtime{
+	runtime := Runtime{
 		Status:    Idle,
 		LLM:       llm.NewOpenRouterProvider(),
 		Workspace: workspace,
 		Executor:  NewExecutor(),
 	}
+	runtime.Tools = append(runtime.Tools, tools.FileWriteTool)
+	runtime.loadTools(config.INTERNAL_TOOL_PATH)
+	runtime.loadTools(config.EXTERNAL_TOOL_PATH)
+	return runtime
 }
 
 type TaskRequest struct {
@@ -108,8 +112,6 @@ func (r *Runtime) Run(prompt string) error {
 	}
 
 	var conv *llm.Conversation
-	r.loadTools(config.INTERNAL_TOOL_PATH)
-	r.loadTools(config.EXTERNAL_TOOL_PATH)
 
 	if len(r.Conversation.Messages) == 0 {
 		initialConversation := llm.Conversation{
@@ -133,6 +135,8 @@ func (r *Runtime) Run(prompt string) error {
 			Content: string(userPrompt),
 			Role:    "user",
 		})
+
+		r.Conversation.Tools = r.Tools
 
 		conv, err = r.LLM.Chat(&r.Conversation)
 	}

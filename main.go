@@ -26,15 +26,15 @@ func main() {
 
 	// agent debugging
 	// config.HEADLESS = true
-	// dir, err := os.Getwd()
+	// // dir, err := os.Getwd()
 
-	// if err != nil {
-	// 	log.Fatal("Failed to get current directory. Error: ", err.Error())
-	// }
+	// // if err != nil {
+	// // 	log.Fatal("Failed to get current directory. Error: ", err.Error())
+	// // }
 
-	// workspace := workspace.Load(dir)
+	// workspace := workspace.Load("/Users/anirban/Documents/Code/example-api")
 	// runtime := agent.NewRuntime(&workspace)
-	// err = runtime.Run("Remove the file test.txt")
+	// err := runtime.Run("Create a commit of the recent changes with a descriptive commit message, no need to ask for approval, proceed with the commit")
 	// // runtime.Run("What version of typescript is being used in this project?")
 	// // runtime.Run("Add the above information in a file packages.md")
 	// if err != nil {

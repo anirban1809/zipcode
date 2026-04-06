@@ -28,9 +28,13 @@ type AppModel struct {
 	Question            components.Question
 	FileChangeViewer    components.FileChangeViewer
 	CommandsMenu        components.Menu
+	ModelsMenu          components.Menu
 	Commands            []string
 	CommandDescriptions []string
+	Models              []string
+	ModelDescriptions   []string
 	StatusBar           components.StatusBar
+	PromptExpanded      bool
 }
 
 func Iniaitalize(workspace *workspace.Workspace) AppModel {
@@ -38,23 +42,29 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 
 	input := textinput.New()
 	input.Focus()
-	input.CharLimit = 1024
+	input.CharLimit = 65536
 	input.Width = width - 2
 	vp := viewport.New(width-2, height-4)
 	vp.SetContent(``)
 	runtime := agent.NewRuntime(workspace)
 
-	items := []string{"/models", "/help", "/exit"}
-	itemDescriptions := []string{"Select model", "Get help", "Exit ZipCode"}
+	commands := []string{"/models", "/help", "/exit"}
+	commandDescriptions := []string{"Select model", "Get help", "Exit ZipCode"}
+
+	models := config.ModelNames
+	modelDescriptions := config.ModelDescriptions
 
 	return AppModel{
 		Workspace:           workspace,
 		Runtime:             &runtime,
 		Prompt:              input,
 		ViewPort:            vp,
-		CommandsMenu:        components.CreateMenu(items, itemDescriptions),
-		Commands:            items,
-		CommandDescriptions: itemDescriptions,
+		CommandsMenu:        components.CreateMenu(commands, commandDescriptions),
+		ModelsMenu:          components.CreateMenu(models, modelDescriptions),
+		Commands:            commands,
+		CommandDescriptions: commandDescriptions,
+		Models:              models,
+		ModelDescriptions:   modelDescriptions,
 		StatusBar:           components.CreateStatusBar(workspace.RootPath, string(config.CurrentModel)),
 		ActiveConversation:  "\n",
 	}
@@ -87,25 +97,6 @@ func (a *AppModel) ProcessQuestion() {
 	a.Question.Selected = false
 }
 
-func (a *AppModel) ProcessCommandsMenu() tea.Cmd {
-	if !a.CommandsMenu.IsVisible() || !a.CommandsMenu.IsSelected() {
-		return nil
-	}
-	a.CommandsMenu.SetVisible(false)
-	i := a.CommandsMenu.GetSelectedIndex()
-
-	switch a.Commands[i] {
-	case "/model":
-		break
-	case "/help":
-		break
-	case "/exit":
-		return tea.Quit
-	}
-
-	return nil
-}
-
 func (a AppModel) GetConversation() string {
 	content := a.Conversation + "\n" + a.ActiveConversation
 	return wordwrap.String(content, a.ViewPort.Width)
@@ -130,8 +121,25 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, tea.Batch(cmds...)
 			}
 		case "enter":
+			if a.ModelsMenu.IsVisible() {
+				selectedModel := a.Models[a.ModelsMenu.GetSelectedIndex()]
+				config.SetCurrentModel(selectedModel)
+				a.StatusBar.SetModel(selectedModel)
+			}
+
 			if strings.HasPrefix(a.Prompt.Value(), "/") {
+				a.CommandsMenu, _ = a.CommandsMenu.Update(msg)
 				a.CommandsMenu.SetVisible(false)
+
+				switch a.Commands[a.CommandsMenu.GetSelectedIndex()] {
+				case "/models":
+					a.ModelsMenu.SetVisible(true)
+				case "/help":
+					break
+				case "/exit":
+					return a, tea.Quit
+				}
+
 				a.Prompt.SetValue("")
 				return a, tea.Batch(tea.Batch(cmds...),
 					waitForRuntimeEvent(), waitForFileChangeEvent())
@@ -148,7 +156,11 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					waitForRuntimeEvent(), waitForFileChangeEvent())
 			}
 
-		case "tab":
+		case "ctrl+e":
+			a.PromptExpanded = !a.PromptExpanded
+			return a, tea.Batch(cmds...)
+
+		case "shift+tab":
 			if a.StatusBar.GetMode() == components.Mode_PLAN {
 				a.StatusBar.SetMode(components.Mode_EDIT)
 				return a, tea.Batch(tea.Batch(cmds...),
@@ -206,7 +218,6 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	a.ProcessQuestion()
-	cmds = append(cmds, a.ProcessCommandsMenu())
 	a.CommandsMenu.SetVisible(strings.HasPrefix(a.Prompt.Value(), "/"))
 
 	var cmd tea.Cmd
@@ -223,6 +234,9 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.CommandsMenu, cmd = a.CommandsMenu.Update(msg)
 	cmds = append(cmds, cmd)
 
+	a.ModelsMenu, cmd = a.ModelsMenu.Update(msg)
+	cmds = append(cmds, cmd)
+
 	a.StatusBar, cmd = a.StatusBar.Update(msg)
 	cmds = append(cmds, cmd)
 
@@ -233,10 +247,63 @@ func (a *AppModel) SetQuestion(question components.Question) {
 	a.Question = question
 }
 
+func (a AppModel) renderPromptArea(width int) string {
+	promptAreaWidth := width - 2
+
+	bgStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("235")).
+		Width(promptAreaWidth)
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Background(lipgloss.Color("235"))
+
+	value := a.Prompt.Value()
+
+	// Wrap the raw text to count visual lines (subtract padding of 2 chars on each side)
+	wrappedValue := wordwrap.String(value, promptAreaWidth-4)
+	lines := strings.Split(wrappedValue, "\n")
+	// Remove trailing empty line from wordwrap
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	if value == "" || len(lines) <= 3 {
+		// Short prompt: input with background, no preview needed
+		return bgStyle.Padding(0, 1).Render(a.Prompt.View())
+	}
+
+	// Long prompt: show preview lines above the input widget
+	var visibleLines []string
+	var hint string
+	if a.PromptExpanded {
+		visibleLines = lines
+		hint = dimStyle.Render(fmt.Sprintf("  %d lines  ctrl+e: collapse ▲", len(lines)))
+	} else {
+		visibleLines = lines[len(lines)-3:]
+		hint = dimStyle.Render(fmt.Sprintf("  %d lines  ctrl+e: expand ▼", len(lines)))
+	}
+
+	preview := bgStyle.Padding(1, 1, 0, 1).Render(strings.Join(visibleLines, "\n"))
+	inputLine := bgStyle.Padding(0, 1, 1, 1).Render(a.Prompt.View())
+
+	return preview + "\n" + hint + "\n" + inputLine
+}
+
 func (a AppModel) View() string {
-	promptView := lipgloss.NewStyle().PaddingBottom(1).Render(a.Prompt.View())
+	width, _, _ := utils.GetTerminalSize()
+	promptView := a.renderPromptArea(width)
 	viewPortView := lipgloss.NewStyle().Padding(1).Render(a.ViewPort.View())
-	return fmt.Sprintf("\n%s\n%s%s\n%s%s\n%s", viewPortView, a.FileChangeViewer.View(), a.Question.View(), promptView, a.CommandsMenu.View(), a.StatusBar.View())
+	return fmt.Sprintf(
+		"\n%s\n%s%s\n%s%s%s\n%s",
+		viewPortView,
+		a.FileChangeViewer.View(),
+		a.Question.View(),
+		promptView,
+		a.CommandsMenu.View(),
+		a.ModelsMenu.View(),
+		a.StatusBar.View(),
+	)
 }
 
 func ClearScreen() {

@@ -67,6 +67,10 @@ func (r Runtime) GetExecutorMessageChannel() chan string {
 	return r.Executor.MessageChannel
 }
 
+func (r *Runtime) SetModel(model string) {
+	r.LLM.SetModel(model, false)
+}
+
 func (r *Runtime) loadTools(path string) error {
 	entries, err := os.ReadDir(path)
 

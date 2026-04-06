@@ -54,6 +54,10 @@ func (s StatusBar) Init() tea.Cmd {
 	return s.Spinner.Tick
 }
 
+func (s *StatusBar) SetModel(model string) {
+	s.Model = model
+}
+
 func (s StatusBar) Update(msg tea.Msg) (StatusBar, tea.Cmd) {
 	var cmd tea.Cmd
 	s.Spinner, cmd = s.Spinner.Update(msg)

@@ -16,7 +16,7 @@ import (
 
 type OpenRouterProvider struct {
 	ProviderId string
-	Model      config.OpenRouterModel
+	Model      string
 	Tools      []tools.Tool
 }
 
@@ -31,7 +31,7 @@ func NewOpenRouterProvider() *OpenRouterProvider {
 }
 
 type OpenRouterRequest struct {
-	Model               config.OpenRouterModel `json:"model,omitempty"`
+	Model               string                 `json:"model,omitempty"`
 	Messages            []Message              `json:"messages"`
 	Provider            *ProviderConfig        `json:"provider,omitempty"`
 	Temperature         float64                `json:"temperature,omitempty"`
@@ -166,9 +166,9 @@ type Usage struct {
 	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details"`
 }
 
-func (p *OpenRouterProvider) SetModel(model config.OpenRouterModel, nitro bool) {
+func (p *OpenRouterProvider) SetModel(model string, nitro bool) {
 	if nitro {
-		p.Model = config.OpenRouterModel(fmt.Sprintf("%s:nitro", model))
+		p.Model = fmt.Sprintf("%s:nitro", model)
 		return
 	}
 	p.Model = model

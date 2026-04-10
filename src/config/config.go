@@ -69,7 +69,10 @@ func SetCurrentModel(model string) {
 	CurrentModel = model
 }
 
-var CurrentModel = "openai/gpt-5.4"
+var CurrentModel = "minimax/minimax-m2.7"
 
 var INTERNAL_TOOL_PATH = "/Users/anirban/Documents/Code/zipcode/src/tools"
 var EXTERNAL_TOOL_PATH = "~/.zipcode/tools"
+
+var INTERNAL_SUBAGENTS_PATH = "/Users/anirban/Documents/Code/zipcode/src/subagents"
+var EXTERNAL_SUBAGENTS_PATH = "~/.zipcode/tools"

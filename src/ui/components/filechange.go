@@ -60,7 +60,7 @@ func (f *FileChangeViewer) ScrollUp() {
 	}
 }
 
-func renderDiffLine(lineNum int, kind tools.DiffLineKind, content string) string {
+func renderDiffLine(kind tools.DiffLineKind, content string) string {
 	switch kind {
 	case tools.DiffLineAdded:
 		return diffAddSign.Render("+") + diffAddedBg.Render(" "+content)
@@ -86,13 +86,13 @@ func (f FileChangeViewer) getLines() []string {
 				for _, line := range hunk.Lines {
 					switch line.Kind {
 					case tools.DiffLineAdded:
-						lines = append(lines, renderDiffLine(newLine, line.Kind, line.Content))
+						lines = append(lines, renderDiffLine(line.Kind, line.Content))
 						newLine++
 					case tools.DiffLineRemoved:
-						lines = append(lines, renderDiffLine(oldLine, line.Kind, line.Content))
+						lines = append(lines, renderDiffLine(line.Kind, line.Content))
 						oldLine++
 					default:
-						lines = append(lines, renderDiffLine(newLine, line.Kind, line.Content))
+						lines = append(lines, renderDiffLine(line.Kind, line.Content))
 						oldLine++
 						newLine++
 					}
@@ -102,8 +102,8 @@ func (f FileChangeViewer) getLines() []string {
 
 	case "create", "append", "replace":
 		contentLines := strings.Split(f.Content, "\n")
-		for i, line := range contentLines {
-			lines = append(lines, renderDiffLine(i+1, tools.DiffLineAdded, line))
+		for _, line := range contentLines {
+			lines = append(lines, renderDiffLine(tools.DiffLineAdded, line))
 		}
 	}
 

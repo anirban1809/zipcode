@@ -74,10 +74,10 @@ func (m Menu) View() string {
 	var menuText strings.Builder
 	for i, item := range m.items {
 		if m.cursor == i {
-			menuText.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#47daff")).Render(fmt.Sprintf("> %-20s %s", item, m.itemDescriptions[i])) + "\n")
+			menuText.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#47daff")).Render(fmt.Sprintf("> %-40s %s", item, m.itemDescriptions[i])) + "\n")
 			continue
 		}
-		menuText.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#31a1bd")).Render(fmt.Sprintf("  %-20s %s", item, m.itemDescriptions[i])) + "\n")
+		menuText.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#31a1bd")).Render(fmt.Sprintf("  %-40s %s", item, m.itemDescriptions[i])) + "\n")
 	}
 	return fmt.Sprintf("\n%s", menuText.String())
 }

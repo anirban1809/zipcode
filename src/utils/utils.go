@@ -2,10 +2,13 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"zipcode/src/config"
+	"zipcode/src/tools"
 
 	"golang.org/x/term"
 )
@@ -65,4 +68,22 @@ func Log(a ...any) {
 	if config.HEADLESS {
 		fmt.Println(a...)
 	}
+}
+
+func GetTool(path string, toolname string) (tools.Tool, error) {
+	name := strings.ReplaceAll(toolname, "_tool", "")
+	content, err := os.ReadFile(fmt.Sprintf("%s/%s/%s.json", path, name, name))
+
+	if err != nil {
+		return tools.Tool{}, errors.New("failed to read tool manifest")
+	}
+
+	var tool tools.Tool
+	err = json.Unmarshal([]byte(content), &tool)
+
+	if err != nil {
+		return tools.Tool{}, errors.New("invalid tool manifest")
+	}
+
+	return tool, nil
 }

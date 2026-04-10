@@ -34,7 +34,7 @@ func main() {
 
 	// workspace := workspace.Load("/Users/anirban/Documents/Code/example-api")
 	// runtime := agent.NewRuntime(&workspace)
-	// err := runtime.Run("Find the index.ts file, Read it and create a summary")
+	// _, err := runtime.Run("Explore the entire codebase and summarize the architecture and code structure in a markdown file named ARCHITECTURE.md")
 	// // runtime.Run("What version of typescript is being used in this project?")
 	// // runtime.Run("Add the above information in a file packages.md")
 	// if err != nil {

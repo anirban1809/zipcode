@@ -46,12 +46,19 @@ type FileChangeEvent struct {
 type Executor struct {
 	EventChannel   chan ResponseEvent
 	MessageChannel chan string
+	SystemPrompt   string
+	Tools          []tools.Tool
 }
 
-func NewExecutor() Executor {
+func (e *Executor) IsSubagentTool(name string) bool {
+	return name == "subagent" || name == "spawn_subagent"
+}
+
+func NewExecutor(systemPrompt string, tools []tools.Tool) Executor {
 	return Executor{
 		EventChannel:   make(chan ResponseEvent),
 		MessageChannel: make(chan string),
+		SystemPrompt:   systemPrompt,
 	}
 }
 
@@ -81,9 +88,10 @@ const (
 )
 
 type ToolResultRequestData struct {
-	ToolCallID string `json:"tool_call_id"`
-	Role       string `json:"role"`
-	Content    string `json:"content"`
+	ToolCallID   string `json:"tool_call_id"`
+	Role         string `json:"role"`
+	Content      string `json:"content"`
+	SubAgentCall bool
 }
 
 type ToolCallResponseData struct {
@@ -99,13 +107,30 @@ type NormalResponseContent struct {
 	} `json:"data"`
 }
 
-func (e *Executor) ProcessResponse(response llm.Message) ([]llm.Message, ExecutionResultStatus, error) {
+type ExecutionActionType string
+
+const (
+	ActionMessage  ExecutionActionType = "message"
+	ActionToolCall ExecutionActionType = "tool_call"
+	ActionSubagent ExecutionActionType = "subagent"
+	ActionComplete ExecutionActionType = "complete"
+)
+
+type ExecutionAction struct {
+	Type     ExecutionActionType
+	Message  *llm.Message
+	ToolCall *ToolCallResponseData
+}
+
+func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, ExecutionResultStatus, error) {
 	if config.HEADLESS {
 		utils.PrintStruct(response)
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) == "" {
-		return []llm.Message{{Role: "user", Content: "Empty response, please retry"}}, ExecutionSucceeded, nil
+		return []ExecutionAction{
+			{Type: ActionMessage, Message: &llm.Message{Role: "user", Content: "Empty response, please retry"}},
+		}, ExecutionSucceeded, nil
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) != "" {
@@ -124,7 +149,7 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]llm.Message, Executi
 	}
 
 	if len(response.ToolCalls) > 0 {
-		results := []llm.Message{}
+		results := []ExecutionAction{}
 
 		for _, toolCall := range response.ToolCalls {
 			tool := ToolCallResponseData{
@@ -132,17 +157,14 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]llm.Message, Executi
 				Name:      toolCall.Function.Name,
 				Arguments: json.RawMessage(toolCall.Function.Arguments),
 			}
-			result, err := e.ProcessToolCall(tool)
 
-			if err != nil {
-				return nil, ExecutionFailed, err
+			actionType := ActionToolCall
+
+			if e.IsSubagentTool(tool.Name) {
+				actionType = ActionSubagent
 			}
 
-			results = append(results, llm.Message{
-				Role:       result.Role,
-				Content:    result.Content,
-				ToolCallId: result.ToolCallID,
-			})
+			results = append(results, ExecutionAction{Type: actionType, ToolCall: &tool})
 
 		}
 
@@ -184,8 +206,7 @@ func GetTool(path string, toolname string) (tools.Tool, error) {
 func (e *Executor) GetToolCallCommand(input ToolCallResponseData) (string, error) {
 	internaltool, err1 := GetTool(config.INTERNAL_TOOL_PATH, input.Name)
 	externaltool, err2 := GetTool(config.EXTERNAL_TOOL_PATH, input.Name)
-	toolPath := ""
-
+	var toolPath string
 	var tool tools.Tool
 
 	if err1 != nil {
@@ -211,10 +232,6 @@ func (e *Executor) GetToolCallCommand(input ToolCallResponseData) (string, error
 
 		command = fmt.Sprintf("%s --%s \"%s\"", command, param, strings.ReplaceAll(args[param].(string), "\"", "\\\""))
 	}
-
-	// command = strings.ReplaceAll(command, "\"", "\\\"")
-	// command = strings.ReplaceAll(command, "'", "\\'")
-
 	return command, nil
 }
 
@@ -223,7 +240,11 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 	default:
 		command, err := e.GetToolCallCommand(input)
 		if err != nil {
-			return nil, err
+			return &ToolResultRequestData{
+				ToolCallID: input.Id,
+				Role:       "tool",
+				Content:    fmt.Sprintf(`{"message":"invalid tool name %s, please retry"}`, input.Name),
+			}, nil
 		}
 
 		utils.Log(command)
@@ -248,6 +269,14 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			ToolCallID: input.Id,
 			Role:       "tool",
 			Content:    string(result),
+		}, nil
+
+	case "subagent":
+		return &ToolResultRequestData{
+			ToolCallID:   input.Id,
+			Role:         "tool",
+			Content:      string("Tool not implemented yet"),
+			SubAgentCall: true,
 		}, nil
 
 	case "file_write":
@@ -297,7 +326,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 
 			EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
 				Question:  "Do you want to make this change?",
-				Options:   []string{"Yes", "No", "Yes, and do not ask again for this session"},
+				Options:   []string{"Yes", "No"},
 				EventType: Tool,
 				Message:   fileWriteInput.Message,
 			})
@@ -330,9 +359,4 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 
 	}
 
-	// return &ToolResultRequestData{
-	// 	ToolCallID: input.Id,
-	// 	Role:       "tool",
-	// 	Content:    fmt.Sprintf(`{"message":"invalid tool name %s, please retry"}`, input.Name),
-	// }, nil
 }

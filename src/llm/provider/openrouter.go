@@ -21,13 +21,7 @@ type OpenRouterProvider struct {
 }
 
 func NewOpenRouterProvider() *OpenRouterProvider {
-	return &OpenRouterProvider{
-		// Model: config.MINIMAX_M2_5,
-		// Tools: []tools.Tool{
-		// 	// tools.BashTool,
-		// 	// tools.FileWriteTool,
-		// },
-	}
+	return &OpenRouterProvider{}
 }
 
 type OpenRouterRequest struct {

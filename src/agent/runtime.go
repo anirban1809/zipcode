@@ -33,6 +33,8 @@ type Runtime struct {
 	InputTokens  int
 	OutputTokens int
 	Conversation llm.Conversation
+	Agent        Agent
+	Session      string
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
@@ -40,9 +42,15 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 		Status:    Idle,
 		LLM:       llm.NewOpenRouterProvider(),
 		Workspace: workspace,
-		Executor:  NewExecutor(),
+		Executor: NewExecutor(prompts.MainSystemPrompt,
+			[]tools.Tool{
+				tools.FileWriteTool,
+				tools.SubAgentTool,
+			},
+		),
 	}
-	runtime.Tools = append(runtime.Tools, tools.FileWriteTool)
+	runtime.Agent = NewAgent(prompts.MainSystemPrompt, &runtime.Tools, llm.NewOpenRouterProvider())
+	runtime.Tools = append(runtime.Tools, tools.FileWriteTool, tools.SubAgentTool)
 	runtime.loadTools(config.INTERNAL_TOOL_PATH)
 	runtime.loadTools(config.EXTERNAL_TOOL_PATH)
 	return runtime
@@ -71,6 +79,63 @@ func (r *Runtime) SetModel(model string) {
 	r.LLM.SetModel(model, false)
 }
 
+type SubAgentRequest struct {
+	AgentName   string
+	AgentPrompt string
+}
+
+type SubAgent struct {
+	Name             string   `json:"name"`
+	ShortDescription string   `json:"short_description"`
+	SystemPrompt     string   `json:"system_prompt"`
+	AllowedTools     []string `json:"allowed_tools"`
+}
+
+func GetToolsforSubAgent(toolNames []string) ([]tools.Tool, error) {
+	allowedTools := []tools.Tool{}
+
+	for _, toolName := range toolNames {
+		toolManifest, err := GetTool(config.INTERNAL_TOOL_PATH, toolName)
+
+		if err != nil {
+			return nil, err
+		}
+
+		allowedTools = append(allowedTools, toolManifest)
+	}
+
+	return allowedTools, nil
+}
+
+func (r *Runtime) NewChildRuntime(agentName string) (*Runtime, error) {
+
+	content, err := os.ReadFile(fmt.Sprintf("%s/%s.json", config.INTERNAL_SUBAGENTS_PATH, agentName))
+	if err != nil {
+		return nil, err
+	}
+
+	var subAgentDefinition SubAgent
+	err = json.Unmarshal(content, &subAgentDefinition)
+
+	if err != nil {
+		return nil, err
+	}
+
+	tools, err := GetToolsforSubAgent(subAgentDefinition.AllowedTools)
+
+	childAgent := NewAgent(
+		subAgentDefinition.SystemPrompt, &tools, llm.NewOpenRouterProvider(),
+	)
+
+	return &Runtime{
+		Status:    Idle,
+		Workspace: r.Workspace,
+		Executor:  r.Executor,
+		Agent:     childAgent,
+		Session:   r.Session,
+	}, nil
+}
+
 func (r *Runtime) loadTools(path string) error {
 	entries, err := os.ReadDir(path)
 
@@ -96,7 +161,56 @@ func (r *Runtime) loadTools(path string) error {
 	return nil
 }
 
-func (r *Runtime) Run(prompt string) error {
+type SubagentToolArgs struct {
+	AgentName string `json:"agent"`
+	Task      string `json:"task"`
+	Context   string `json:"context,omitempty"`
+}
+
+func (r *Runtime) InvokeSubAgent(tool ToolCallResponseData) (llm.Message, error) {
+	var args SubagentToolArgs
+	if err := json.Unmarshal(tool.Arguments, &args); err != nil {
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tool.Id,
+			Content:    fmt.Sprintf(`{"success":false,"error":"invalid subagent args: %s"}`, err.Error()),
+		}, nil
+	}
+
+	childRuntime, err := r.NewChildRuntime(args.AgentName)
+	if err != nil {
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tool.Id,
+			Content:    fmt.Sprintf(`{"success":false,"error":"failed to create subagent: %s"}`, err.Error()),
+		}, nil
+	}
+
+	output, err := childRuntime.Run(args.Task)
+	if err != nil {
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tool.Id,
+			Content:    fmt.Sprintf(`{"success":false,"error":"subagent failed: %s"}`, err.Error()),
+		}, nil
+	}
+
+	result := map[string]any{
+		"success":    true,
+		"agent_type": args.AgentName,
+		"output":     output,
+	}
+
+	content, _ := json.Marshal(result)
+
+	return llm.Message{
+		Role:       "tool",
+		ToolCallId: tool.Id,
+		Content:    string(content),
+	}, nil
+}
+
+func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 
 	r.Status = Running
 	r.Prompt = prompt
@@ -112,52 +226,29 @@ func (r *Runtime) Run(prompt string) error {
 	userPrompt, err := json.Marshal(taskRequest)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var conv *llm.Conversation
 
-	if len(r.Conversation.Messages) == 0 {
-		initialConversation := llm.Conversation{
-			Messages: []llm.Message{
-				{
-					Content: prompts.MainSystemPrompt,
-					Role:    "system",
-				},
-				{
-					Content: string(userPrompt),
-					Role:    "user",
-				},
-			},
-			Tools: r.Tools,
-		}
-
-		conv, err = r.LLM.Chat(&initialConversation)
-	} else {
-
-		r.Conversation.Messages = append(r.Conversation.Messages, llm.Message{
-			Content: string(userPrompt),
-			Role:    "user",
-		})
-
-		r.Conversation.Tools = r.Tools
-
-		conv, err = r.LLM.Chat(&r.Conversation)
-	}
+	conv, err = r.Agent.RunStep(llm.Message{
+		Role:    "user",
+		Content: string(userPrompt),
+	})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for r.Status != Idle {
 		lastResponseIndex := len(conv.Messages) - 1
 		lastResponse := conv.Messages[lastResponseIndex]
-		messages, status, err := r.Executor.ProcessResponse(lastResponse)
+		actions, status, err := r.Executor.ProcessResponse(lastResponse)
 
 		utils.Log(lastResponse.Content)
 
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if status == ExecutionCompleted {
@@ -165,8 +256,38 @@ func (r *Runtime) Run(prompt string) error {
 			break
 		}
 
-		conv.Messages = append(conv.Messages, messages...)
-		conv, err = r.LLM.Chat(conv)
+		messages := []llm.Message{}
+
+		for _, action := range actions {
+			switch action.Type {
+			case ActionToolCall:
+				result, err := r.Executor.ProcessToolCall(*action.ToolCall)
+				if err != nil {
+					return nil, err
+				}
+
+				messages = append(messages, llm.Message{
+					Role:       result.Role,
+					Content:    result.Content,
+					ToolCallId: result.ToolCallID,
+				})
+
+			case ActionSubagent:
+				result, err := r.InvokeSubAgent(*action.ToolCall)
+				if err != nil {
+					return nil, err
+				}
+
+				messages = append(messages, result)
+			}
+
+		}
+
+		conv, err := r.Agent.RunStep(messages...)
+
+		if err != nil {
+			return nil, err
+		}
 
 		r.InputTokens += conv.PromptTokens
 		r.OutputTokens += conv.CompletionTokens
@@ -177,5 +298,5 @@ func (r *Runtime) Run(prompt string) error {
 	r.Conversation.CompletionTokens += r.Conversation.CompletionTokens
 	r.Conversation.TotalTokens += r.Conversation.TotalTokens
 
-	return nil
+	return &conv.Messages[len(conv.Messages)-1], nil
 }

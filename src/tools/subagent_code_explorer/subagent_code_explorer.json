@@ -1,0 +1,26 @@
+{
+  "type": "function",
+  "function": {
+    "name": "subagent_code_explorer",
+    "description": "Run the code_explorer sub-agent to analyze and understand the codebase, navigate structures, and provide insights about architecture, data flow, and implementation details.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "The specialist agent to run for code exploration tasks. This agent focuses on understanding code structure, relationships, and behavior without modifying the codebase.",
+          "enum": ["code_explorer"]
+        },
+        "task": {
+          "type": "string",
+          "description": "A clear description of what needs to be explored or understood in the codebase, such as specific modules, functions, flows, or architectural components."
+        },
+        "context": {
+          "type": "string",
+          "description": "Relevant scoped context such as file paths, directories, specific components, or areas of the codebase to focus the exploration."
+        }
+      },
+      "required": ["agent", "task"]
+    }
+  }
+}

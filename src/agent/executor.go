@@ -22,10 +22,12 @@ const (
 )
 
 type ResponseEvent struct {
-	Question  string
-	Options   []string
-	EventType ResponseEventType
-	Message   string
+	Question     string
+	Options      []string
+	EventType    ResponseEventType
+	Message      string
+	SubAgent     bool
+	SubAgentName string
 }
 
 type FileChangeType int
@@ -44,14 +46,16 @@ type FileChangeEvent struct {
 }
 
 type Executor struct {
-	EventChannel   chan ResponseEvent
-	MessageChannel chan string
-	SystemPrompt   string
-	Tools          []tools.Tool
+	EventChannel    chan ResponseEvent
+	MessageChannel  chan string
+	SystemPrompt    string
+	Tools           []tools.Tool
+	SubAgentRunning bool
+	SubAgent        string
 }
 
 func (e *Executor) IsSubagentTool(name string) bool {
-	return name == "subagent" || name == "spawn_subagent"
+	return strings.HasPrefix(name, "subagent")
 }
 
 func NewExecutor(systemPrompt string, tools []tools.Tool) Executor {
@@ -88,10 +92,9 @@ const (
 )
 
 type ToolResultRequestData struct {
-	ToolCallID   string `json:"tool_call_id"`
-	Role         string `json:"role"`
-	Content      string `json:"content"`
-	SubAgentCall bool
+	ToolCallID string `json:"tool_call_id"`
+	Role       string `json:"role"`
+	Content    string `json:"content"`
 }
 
 type ToolCallResponseData struct {
@@ -120,6 +123,11 @@ type ExecutionAction struct {
 	Type     ExecutionActionType
 	Message  *llm.Message
 	ToolCall *ToolCallResponseData
+}
+
+func (e *Executor) SetSubAgentModeOn(mode bool, name string) {
+	e.SubAgent = name
+	e.SubAgentRunning = mode
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, ExecutionResultStatus, error) {
@@ -180,8 +188,10 @@ func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
 	}
 
 	EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
-		EventType: eventType,
-		Message:   value,
+		EventType:    eventType,
+		Message:      value,
+		SubAgent:     e.SubAgentRunning,
+		SubAgentName: e.SubAgent,
 	})
 }
 
@@ -269,14 +279,6 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			ToolCallID: input.Id,
 			Role:       "tool",
 			Content:    string(result),
-		}, nil
-
-	case "subagent":
-		return &ToolResultRequestData{
-			ToolCallID:   input.Id,
-			Role:         "tool",
-			Content:      string("Tool not implemented yet"),
-			SubAgentCall: true,
 		}, nil
 
 	case "file_write":

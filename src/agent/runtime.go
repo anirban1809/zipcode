@@ -35,6 +35,7 @@ type Runtime struct {
 	Conversation llm.Conversation
 	Agent        Agent
 	Session      string
+	ChildRuntime bool
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
@@ -50,7 +51,7 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 		),
 	}
 	runtime.Agent = NewAgent(prompts.MainSystemPrompt, &runtime.Tools, llm.NewOpenRouterProvider())
-	runtime.Tools = append(runtime.Tools, tools.FileWriteTool, tools.SubAgentTool)
+	runtime.Tools = append(runtime.Tools, tools.FileWriteTool)
 	runtime.loadTools(config.INTERNAL_TOOL_PATH)
 	runtime.loadTools(config.EXTERNAL_TOOL_PATH)
 	return runtime
@@ -128,11 +129,12 @@ func (r *Runtime) NewChildRuntime(agentName string) (*Runtime, error) {
 	)
 
 	return &Runtime{
-		Status:    Idle,
-		Workspace: r.Workspace,
-		Executor:  r.Executor,
-		Agent:     childAgent,
-		Session:   r.Session,
+		Status:       Idle,
+		Workspace:    r.Workspace,
+		Executor:     r.Executor,
+		Agent:        childAgent,
+		Session:      r.Session,
+		ChildRuntime: true,
 	}, nil
 }
 
@@ -261,6 +263,9 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		for _, action := range actions {
 			switch action.Type {
 			case ActionToolCall:
+				if !r.ChildRuntime {
+					r.Executor.SetSubAgentModeOn(false, "")
+				}
 				result, err := r.Executor.ProcessToolCall(*action.ToolCall)
 				if err != nil {
 					return nil, err
@@ -273,6 +278,14 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 				})
 
 			case ActionSubagent:
+				var args SubagentToolArgs
+				err := json.Unmarshal((*action.ToolCall).Arguments, &args)
+
+				if err != nil {
+					return nil, err
+				}
+
+				r.Executor.SetSubAgentModeOn(true, args.AgentName)
 				result, err := r.InvokeSubAgent(*action.ToolCall)
 				if err != nil {
 					return nil, err

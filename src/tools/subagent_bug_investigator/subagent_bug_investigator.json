@@ -1,0 +1,26 @@
+{
+  "type": "function",
+  "function": {
+    "name": "subagent_bug_investigator",
+    "description": "Run the bug_investigator sub-agent to analyze the codebase, identify bugs, determine root causes, and apply precise fixes or patches.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "The specialist agent to run for debugging tasks. This agent performs end-to-end bug investigation including analysis, root cause identification, and patch generation.",
+          "enum": ["bug_investigator"]
+        },
+        "task": {
+          "type": "string",
+          "description": "A clear description of the bug or issue to investigate, including symptoms, failures, or unexpected behavior."
+        },
+        "context": {
+          "type": "string",
+          "description": "Relevant scoped context such as file paths, logs, stack traces, recent changes, or failing tests to assist in debugging."
+        }
+      },
+      "required": ["agent", "task"]
+    }
+  }
+}

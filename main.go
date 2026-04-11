@@ -34,7 +34,8 @@ func main() {
 
 	// workspace := workspace.Load("/Users/anirban/Documents/Code/example-api")
 	// runtime := agent.NewRuntime(&workspace)
-	// _, err := runtime.Run("Explore the entire codebase and summarize the architecture and code structure in a markdown file named ARCHITECTURE.md")
+	// _, err := runtime.Run("Explore the entire codebase and create a detailed architecture summary")
+	// // _, err := runtime.Run("The image routes randomly fail with a 500 error. Diagnose the issue and fix it.")
 	// // runtime.Run("What version of typescript is being used in this project?")
 	// // runtime.Run("Add the above information in a file packages.md")
 	// if err != nil {

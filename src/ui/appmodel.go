@@ -17,24 +17,26 @@ import (
 )
 
 type AppModel struct {
-	Workspace           *workspace.Workspace
-	Runtime             *agent.Runtime
-	Prompt              textinput.Model
-	ViewPort            viewport.Model
-	Result              string
-	Tasks               []components.Task
-	Conversation        string
-	ActiveConversation  string
-	Question            components.Question
-	FileChangeViewer    components.FileChangeViewer
-	CommandsMenu        components.Menu
-	ModelsMenu          components.Menu
-	Commands            []string
-	CommandDescriptions []string
-	Models              []string
-	ModelDescriptions   []string
-	StatusBar           components.StatusBar
-	PromptExpanded      bool
+	Workspace            *workspace.Workspace
+	Runtime              *agent.Runtime
+	Prompt               textinput.Model
+	ViewPort             viewport.Model
+	Result               string
+	Tasks                []components.Task
+	Conversation         string
+	ActiveConversation   string
+	ActiveToolMessages   []string
+	ToolMessagesExpanded bool
+	Question             components.Question
+	FileChangeViewer     components.FileChangeViewer
+	CommandsMenu         components.Menu
+	ModelsMenu           components.Menu
+	Commands             []string
+	CommandDescriptions  []string
+	Models               []string
+	ModelDescriptions    []string
+	StatusBar            components.StatusBar
+	PromptExpanded       bool
 }
 
 func Iniaitalize(workspace *workspace.Workspace) AppModel {
@@ -98,7 +100,32 @@ func (a *AppModel) ProcessQuestion() {
 }
 
 func (a AppModel) GetConversation() string {
-	content := a.Conversation + "\n" + a.ActiveConversation
+	toolSection := ""
+	if len(a.ActiveToolMessages) > 0 {
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+		hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+
+		var visibleMessages []string
+		if a.ToolMessagesExpanded || len(a.ActiveToolMessages) <= 4 {
+			visibleMessages = a.ActiveToolMessages
+		} else {
+			hidden := len(a.ActiveToolMessages) - 4
+			hint := hintStyle.Render(fmt.Sprintf(" └── ... %d more tool calls ctrl+r: expand ▼", hidden))
+			visibleMessages = append([]string{hint}, a.ActiveToolMessages[len(a.ActiveToolMessages)-4:]...)
+		}
+
+		var rendered []string
+		if a.ToolMessagesExpanded && len(a.ActiveToolMessages) > 4 {
+			hint := hintStyle.Render(" └── ctrl+r: collapse ▲")
+			rendered = append(rendered, hint)
+		}
+		for _, m := range visibleMessages {
+			rendered = append(rendered, dimStyle.Render(m))
+		}
+		toolSection = strings.Join(rendered, "\n") + "\n"
+	}
+
+	content := a.Conversation + "\n" + a.ActiveConversation + toolSection
 	return wordwrap.String(content, a.ViewPort.Width)
 }
 
@@ -160,6 +187,11 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.PromptExpanded = !a.PromptExpanded
 			return a, tea.Batch(cmds...)
 
+		case "ctrl+r":
+			a.ToolMessagesExpanded = !a.ToolMessagesExpanded
+			a.ViewPort.SetContent(a.GetConversation())
+			return a, tea.Batch(cmds...)
+
 		case "shift+tab":
 			if a.StatusBar.GetMode() == components.Mode_PLAN {
 				a.StatusBar.SetMode(components.Mode_EDIT)
@@ -177,21 +209,33 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.StatusBar.UpdateUsage(a.Runtime.InputTokens, a.Runtime.OutputTokens)
 
 		if msg.EventType == agent.Tool {
-			a.ActiveConversation += (lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Render(" └── "+msg.Message) + "\n")
+			var message string
 
+			if msg.SubAgent {
+				message = fmt.Sprintf(" └── (Subagent: %s) %s", msg.SubAgentName, msg.Message)
+			} else {
+				message = fmt.Sprintf(" └── %s", msg.Message)
+			}
+
+			a.ActiveToolMessages = append(a.ActiveToolMessages, message)
 			a.ViewPort.SetContent(a.GetConversation())
 			a.ViewPort.GotoBottom()
+
 			if msg.Question != "" {
 				a.SetQuestion(components.CreateQuestion(msg.Question, msg.Options))
 				a.Question.Visible = true
 			}
 
 		} else {
-			a.ActiveConversation += ("\n" + lipgloss.NewStyle().Render(msg.Message) + "\n")
+			toolHistory := strings.Join(a.ActiveToolMessages, "\n")
+			if toolHistory != "" {
+				toolHistory = "\n" + toolHistory
+			}
+			a.ActiveConversation += toolHistory + "\n" + lipgloss.NewStyle().Render(msg.Message) + "\n"
 			a.Conversation += "\n" + strings.Replace(a.ActiveConversation, "⏺ ", "✔ ", 1)
 			a.ActiveConversation = "\n"
+			a.ActiveToolMessages = nil
+			a.ToolMessagesExpanded = false
 			a.StatusBar.SetStatus(components.Status_IDLE)
 			a.ViewPort.SetContent(a.GetConversation())
 			a.ViewPort.GotoBottom()

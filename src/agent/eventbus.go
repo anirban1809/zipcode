@@ -1,9 +1,10 @@
 package agent
 
 type EventsManager struct {
-	agentOutput chan ResponseEvent
-	agentInput  chan string
-	fileChange  chan FileChangeEvent
+	agentOutput   chan ResponseEvent
+	agentInput    chan string
+	fileChange    chan FileChangeEvent
+	subagentInput chan string
 }
 
 type ChannelType int
@@ -12,6 +13,7 @@ const (
 	AGENT_OUTPUT_CHANNEL ChannelType = iota
 	AGENT_INPUT_CHANNEL
 	FILE_DIFF_CHANNEL
+	SUBAGENT_CHANNEL
 )
 
 func (e *EventsManager) WriteToChannel(channelType ChannelType, data any) {
@@ -27,6 +29,10 @@ func (e *EventsManager) WriteToChannel(channelType ChannelType, data any) {
 	case FILE_DIFF_CHANNEL:
 		e.fileChange <- data.(FileChangeEvent)
 		return
+
+	case SUBAGENT_CHANNEL:
+		e.subagentInput <- data.(string)
+		return
 	}
 }
 
@@ -40,6 +46,10 @@ func (e *EventsManager) ReadFromChannel(channelType ChannelType) any {
 
 	case FILE_DIFF_CHANNEL:
 		return <-e.fileChange
+
+	case SUBAGENT_CHANNEL:
+		return <-e.subagentInput
+
 	}
 
 	return nil
@@ -49,8 +59,9 @@ var EventManager = CreateEventManager()
 
 func CreateEventManager() EventsManager {
 	return EventsManager{
-		agentOutput: make(chan ResponseEvent),
-		agentInput:  make(chan string),
-		fileChange:  make(chan FileChangeEvent),
+		agentOutput:   make(chan ResponseEvent),
+		agentInput:    make(chan string),
+		fileChange:    make(chan FileChangeEvent),
+		subagentInput: make(chan string),
 	}
 }

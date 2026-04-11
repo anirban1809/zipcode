@@ -12,12 +12,10 @@ func LoadSubAgents() Tool {
 					"agent": {
 						Type: "string",
 						Description: `Which specialist to run. 
-						bug_investigator: investigates runtime errors and likely root causes. 
-						refactor_advisor: proposes safe refactoring plans. 
-						test_triage: diagnoses failing tests. 
-						codebase_summarizer: summarizes architecture and code structure.`,
+						bug_identifier: investigates runtime errors and likely root causes. 
+						code_explorer: explores the codebase and provides insights.`,
 						Enum: []any{
-							"bug_investigator",
+							"bug_identifier",
 							"code_explorer",
 						},
 					},

@@ -58,8 +58,8 @@ func (e *Executor) IsSubagentTool(name string) bool {
 	return strings.HasPrefix(name, "subagent")
 }
 
-func NewExecutor(systemPrompt string, tools []tools.Tool) Executor {
-	return Executor{
+func NewExecutor(systemPrompt string, tools []tools.Tool) *Executor {
+	return &Executor{
 		EventChannel:   make(chan ResponseEvent),
 		MessageChannel: make(chan string),
 		SystemPrompt:   systemPrompt,
@@ -148,7 +148,10 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, Exe
 		if err != nil {
 			// unmarshalling failed implies that the llm returned a plain string instead
 			// of a JSON response. We'll use the string as the executor response
-			e.pushEvent(Message, response.Content)
+			if !e.SubAgentRunning {
+				e.pushEvent(Message, response.Content)
+			}
+
 			return nil, ExecutionCompleted, nil
 		}
 

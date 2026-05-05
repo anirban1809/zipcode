@@ -25,7 +25,7 @@ type RuntimeEvent string
 
 type Runtime struct {
 	Prompt       string
-	Executor     Executor
+	Executor     *Executor
 	Status       RuntimeStatus
 	LLM          *llm.OpenRouterProvider
 	Workspace    *workspace.Workspace
@@ -188,7 +188,9 @@ func (r *Runtime) InvokeSubAgent(tool ToolCallResponseData) (llm.Message, error)
 		}, nil
 	}
 
+	r.Executor.SetSubAgentModeOn(true, args.AgentName)
 	output, err := childRuntime.Run(args.Task)
+	r.Executor.SetSubAgentModeOn(false, "")
 	if err != nil {
 		return llm.Message{
 			Role:       "tool",
@@ -213,7 +215,6 @@ func (r *Runtime) InvokeSubAgent(tool ToolCallResponseData) (llm.Message, error)
 }
 
 func (r *Runtime) Run(prompt string) (*llm.Message, error) {
-
 	r.Status = Running
 	r.Prompt = prompt
 
@@ -263,9 +264,7 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		for _, action := range actions {
 			switch action.Type {
 			case ActionToolCall:
-				if !r.ChildRuntime {
-					r.Executor.SetSubAgentModeOn(false, "")
-				}
+
 				result, err := r.Executor.ProcessToolCall(*action.ToolCall)
 				if err != nil {
 					return nil, err
@@ -285,7 +284,6 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 					return nil, err
 				}
 
-				r.Executor.SetSubAgentModeOn(true, args.AgentName)
 				result, err := r.InvokeSubAgent(*action.ToolCall)
 				if err != nil {
 					return nil, err

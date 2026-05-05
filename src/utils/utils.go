@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"reflect"
 	"strings"
@@ -67,6 +68,15 @@ func LogValue(value any) {
 func Log(a ...any) {
 	if config.HEADLESS {
 		fmt.Println(a...)
+	} else {
+		f, err := os.OpenFile("./logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		if _, err := fmt.Fprintf(f, "%s\n", a); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -86,4 +96,22 @@ func GetTool(path string, toolname string) (tools.Tool, error) {
 	}
 
 	return tool, nil
+}
+
+func Map[T any, U any](ts []T, f func(T, int) U) []U {
+	us := make([]U, len(ts))
+	for i, v := range ts {
+		us[i] = f(v, i)
+	}
+	return us
+}
+
+func Filter[T any](ts []T, f func(T, int) bool) []T {
+	us := []T{}
+	for i, v := range ts {
+		if f(v, i) {
+			us = append(us, ts[i])
+		}
+	}
+	return us
 }

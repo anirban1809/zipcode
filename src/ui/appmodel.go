@@ -37,6 +37,7 @@ type AppModel struct {
 	ModelDescriptions    []string
 	StatusBar            components.StatusBar
 	PromptExpanded       bool
+	subagent             bool
 }
 
 func Iniaitalize(workspace *workspace.Workspace) AppModel {
@@ -110,7 +111,7 @@ func (a AppModel) GetConversation() string {
 			visibleMessages = a.ActiveToolMessages
 		} else {
 			hidden := len(a.ActiveToolMessages) - 4
-			hint := hintStyle.Render(fmt.Sprintf(" └── ... %d more tool calls ctrl+r: expand ▼", hidden))
+			hint := hintStyle.Render(fmt.Sprintf(" %s\n └── ... %d more tool calls ctrl+r: expand ▼", "subagent", hidden))
 			visibleMessages = append([]string{hint}, a.ActiveToolMessages[len(a.ActiveToolMessages)-4:]...)
 		}
 
@@ -211,14 +212,16 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.EventType == agent.Tool {
 			var message string
 
-			if msg.SubAgent {
-				message = fmt.Sprintf(" └── (Subagent: %s) %s", msg.SubAgentName, msg.Message)
-			} else {
-				message = fmt.Sprintf(" └── %s", msg.Message)
+			if msg.SubAgent && !a.subagent {
+				message = msg.SubAgentName
+				a.ActiveToolMessages = append(a.ActiveToolMessages, message)
+				a.subagent = true
 			}
 
+			message = fmt.Sprintf(" └── %s", msg.Message)
 			a.ActiveToolMessages = append(a.ActiveToolMessages, message)
 			a.ViewPort.SetContent(a.GetConversation())
+
 			a.ViewPort.GotoBottom()
 
 			if msg.Question != "" {

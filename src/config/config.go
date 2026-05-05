@@ -27,6 +27,7 @@ const (
 
 var ModelNames = []string{
 	"openai/gpt-5.2",
+	"openai/gpt-5.5",
 	"minimax/minimax-m2.5",
 	"minimax/minimax-m2.7",
 	"anthropic/claude-sonnet-4.6",
@@ -69,7 +70,7 @@ func SetCurrentModel(model string) {
 	CurrentModel = model
 }
 
-var CurrentModel = "minimax/minimax-m2.7"
+var CurrentModel = "minimax/minimax-m2.5"
 
 var INTERNAL_TOOL_PATH = "/Users/anirban/Documents/Code/zipcode/src/tools"
 var EXTERNAL_TOOL_PATH = "~/.zipcode/tools"

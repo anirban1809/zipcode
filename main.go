@@ -12,6 +12,7 @@ import (
 
 func main() {
 
+	//------------bubbletea implementation (deprecated)----------//
 	// dir, err := os.Getwd()
 
 	// if err != nil {
@@ -25,7 +26,7 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
-	//--------------------------------------//
+	//---------------tuix implementation-----------------//
 	width, height, _ := utils.GetTerminalSize()
 	dir, _ := os.Getwd()
 	ws := workspace.Load(dir)

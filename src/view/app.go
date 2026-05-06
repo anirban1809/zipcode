@@ -207,8 +207,12 @@ func App(props tuix.Props) tuix.Element {
 
 	children = append(children, view.StatusLine(tuix.Props{
 		Values: map[string]any{
-			"workspacePath": workspace.AbsToTildePath(props.Get("wd").(string)),
-			"running":       activeSession,
+			"workspacePath":         workspace.AbsToTildePath(props.Get("wd").(string)),
+			"running":               activeSession,
+			"inputTokens":           runtime.InputTokens,
+			"outputTokens":          runtime.OutputTokens,
+			"branch":                runtime.Workspace.GetCurrentBranch(),
+			"hasUncommittedChanges": runtime.Workspace.HasUncommittedChanges(),
 		},
 	}))
 

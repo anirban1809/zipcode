@@ -306,8 +306,8 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 
 	r.Conversation.Messages = append(r.Conversation.Messages, conv.Messages...)
 	r.Conversation.PromptTokens += r.InputTokens
-	r.Conversation.CompletionTokens += r.Conversation.CompletionTokens
-	r.Conversation.TotalTokens += r.Conversation.TotalTokens
+	r.Conversation.CompletionTokens += r.OutputTokens
+	r.Conversation.TotalTokens += r.InputTokens + r.OutputTokens
 
 	return &conv.Messages[len(conv.Messages)-1], nil
 }

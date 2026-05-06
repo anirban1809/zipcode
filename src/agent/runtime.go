@@ -60,17 +60,6 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 	return runtime
 }
 
-type TaskRequest struct {
-	Type string          `json:"type"`
-	Data TaskRequestData `json:"data"`
-}
-
-type TaskRequestData struct {
-	Objective string `json:"objective"`
-	Workspace string `json:"workspace,omitempty"`
-	Context   string `json:"context,omitempty"`
-}
-
 func (r Runtime) GetExecutorEventChannel() chan ResponseEvent {
 	return r.Executor.EventChannel
 }
@@ -244,25 +233,9 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 	r.Status = Running
 	r.Prompt = prompt
 
-	taskRequest := TaskRequest{
-		Type: "task",
-		Data: TaskRequestData{
-			Objective: prompt,
-			Workspace: r.Workspace.RootPath,
-		},
-	}
-
-	userPrompt, err := json.Marshal(taskRequest)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var conv *llm.Conversation
-
-	conv, err = r.Agent.RunStep(llm.Message{
+	conv, err := r.Agent.RunStep(llm.Message{
 		Role:    "user",
-		Content: string(userPrompt),
+		Content: prompt,
 	})
 
 	if err != nil {

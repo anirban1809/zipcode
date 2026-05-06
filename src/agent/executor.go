@@ -103,13 +103,6 @@ type ToolCallResponseData struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-type NormalResponseContent struct {
-	Type string `json:"type"`
-	Data struct {
-		Message string `json:"message"`
-	} `json:"data"`
-}
-
 type ExecutionActionType string
 
 const (
@@ -137,25 +130,14 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, Exe
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) == "" {
 		return []ExecutionAction{
-			{Type: ActionMessage, Message: &llm.Message{Role: "user", Content: "Empty response, please retry"}},
+			{Type: ActionMessage, Message: &llm.Message{Role: "user", Content: "retry"}},
 		}, ExecutionSucceeded, nil
 	}
 
 	if response.ToolCalls == nil && strings.TrimSpace(response.Content) != "" {
-		var content NormalResponseContent
-		err := json.Unmarshal([]byte(response.Content), &content)
-
-		if err != nil {
-			// unmarshalling failed implies that the llm returned a plain string instead
-			// of a JSON response. We'll use the string as the executor response
-			if !e.SubAgentRunning {
-				e.pushEvent(Message, response.Content)
-			}
-
-			return nil, ExecutionCompleted, nil
+		if !e.SubAgentRunning {
+			e.pushEvent(Message, response.Content)
 		}
-
-		e.pushEvent(Message, content.Data.Message)
 		return nil, ExecutionCompleted, nil
 	}
 
@@ -256,7 +238,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			return &ToolResultRequestData{
 				ToolCallID: input.Id,
 				Role:       "tool",
-				Content:    fmt.Sprintf(`{"message":"invalid tool name %s, please retry"}`, input.Name),
+				Content:    fmt.Sprintf("unknown tool: %s", input.Name),
 			}, nil
 		}
 
@@ -359,7 +341,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 		return &ToolResultRequestData{
 			ToolCallID: input.Id,
 			Role:       "tool",
-			Content:    string("Action denied by user"),
+			Content:    "denied",
 		}, nil
 
 	}

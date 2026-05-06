@@ -50,6 +50,9 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 			},
 		),
 	}
+	if workspace != nil && workspace.Session != nil {
+		runtime.Session = workspace.Session.ID
+	}
 	runtime.Agent = NewAgent(prompts.MainSystemPrompt, &runtime.Tools, llm.NewOpenRouterProvider())
 	runtime.Tools = append(runtime.Tools, tools.FileWriteTool)
 	runtime.loadTools(config.INTERNAL_TOOL_PATH)
@@ -78,6 +81,29 @@ func (r Runtime) GetExecutorMessageChannel() chan string {
 
 func (r *Runtime) SetModel(model string) {
 	r.LLM.SetModel(model, false)
+}
+
+func (r *Runtime) SetSession(session *workspace.Session) {
+	if session == nil {
+		return
+	}
+	r.Session = session.ID
+	if r.Workspace != nil {
+		r.Workspace.Session = session
+	}
+	r.Agent.RestoreConversation(session.Messages)
+}
+
+func (r *Runtime) persistSessionHistory() {
+	if r.Workspace == nil || r.Workspace.Session == nil {
+		return
+	}
+	messages := r.Agent.Conversation.Messages
+	if len(messages) > 0 && messages[0].Role == "system" {
+		messages = messages[1:]
+	}
+	r.Workspace.Session.Messages = messages
+	_ = r.Workspace.Session.Save()
 }
 
 type SubAgentRequest struct {
@@ -308,6 +334,8 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 	r.Conversation.PromptTokens += r.InputTokens
 	r.Conversation.CompletionTokens += r.OutputTokens
 	r.Conversation.TotalTokens += r.InputTokens + r.OutputTokens
+
+	r.persistSessionHistory()
 
 	return &conv.Messages[len(conv.Messages)-1], nil
 }

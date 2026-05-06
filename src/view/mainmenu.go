@@ -3,6 +3,7 @@ package view
 import (
 	"os"
 	"strings"
+	"zipcode/src/agent"
 	"zipcode/src/utils"
 	view "zipcode/src/view/components"
 
@@ -29,11 +30,13 @@ func MainMenu(props tuix.Props) tuix.Element {
 	setActiveView := props.Get("setActiveView").(func(string))
 	submitPrompt := props.Get("submitPrompt").(func(string))
 	prompt := props.Get("prompt").(string)
+	runtime := props.Get("runtime").(*agent.Runtime)
 
 	var commands = []Command{
 		{Name: "/models", Kind: CmdView},
 		{Name: "/skills", Kind: CmdView},
 		{Name: "/agents", Kind: CmdView},
+		{Name: "/sessions", Kind: CmdView},
 		{Name: "/settings", Kind: CmdView},
 		{Name: "/about", Kind: CmdPrompt, Prompt: "Tell me about this project."},
 		{Name: "/exit", Kind: CmdAction, Run: func() { os.Exit(0) }},
@@ -66,6 +69,11 @@ func MainMenu(props tuix.Props) tuix.Element {
 
 	skillsView := view.Skills(tuix.Props{})
 	agentsView := view.Agent(tuix.Props{})
+	sessionsView := view.Sessions(tuix.Props{Values: map[string]any{
+		"setActiveView": setActiveView,
+		"visible":       activeView == "/sessions",
+		"runtime":       runtime,
+	}})
 
 	if activeView == "/models" {
 		return modelSelection
@@ -81,6 +89,10 @@ func MainMenu(props tuix.Props) tuix.Element {
 
 	if activeView == "/agents" {
 		return agentsView
+	}
+
+	if activeView == "/sessions" {
+		return sessionsView
 	}
 
 	commandNames := utils.Map(filteredItems, func(item Command, index int) string {

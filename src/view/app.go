@@ -21,6 +21,7 @@ func App(props tuix.Props) tuix.Element {
 	livePrompt, setLivePrompt := tuix.UseState("")
 	livePromptIdx, setLivePromptIdx := tuix.UseState(-1)
 	activeMenuView, setActiveMenuView := tuix.UseState("")
+	notification, setNotification := tuix.UseState("")
 
 	questionVisible, setQuestionVisible := tuix.UseState(false)
 	question, setQuestion := tuix.UseState(struct {
@@ -37,6 +38,7 @@ func App(props tuix.Props) tuix.Element {
 
 	submitPrompt := func(p string) {
 		promptChan <- p
+		agent.EventManager.WriteToChannel(agent.NOTIFICATION_CHANNEL, "")
 		setPrompt("")
 		if !activeSession {
 			setActiveSession(true)
@@ -62,6 +64,13 @@ func App(props tuix.Props) tuix.Element {
 				for {
 					ev := agent.EventManager.ReadFromChannel(agent.AGENT_OUTPUT_CHANNEL).(agent.ResponseEvent)
 					agentOut <- ev
+				}
+			}()
+
+			go func() {
+				for {
+					notif := agent.EventManager.ReadFromChannel(agent.NOTIFICATION_CHANNEL).(string)
+					setNotification(notif)
 				}
 			}()
 
@@ -177,6 +186,15 @@ func App(props tuix.Props) tuix.Element {
 		setQuestionVisible(false)
 	}
 
+	notificationEl := tuix.Box(
+		tuix.Props{Padding: [4]int{1, 0, 0, 0}},
+		tuix.NewStyle().Foreground(tuix.Hex("#9ad8ff")),
+		tuix.Text(notification, tuix.NewStyle()),
+	)
+	if notification != "" {
+		children = append(children, notificationEl)
+	}
+
 	children = append(children, tuix.Box(
 		tuix.Props{Direction: tuix.Row, Padding: [4]int{0, 1, 0, 1}},
 		tuix.NewStyle().Border(tuix.Border{
@@ -200,6 +218,7 @@ func App(props tuix.Props) tuix.Element {
 				"setActiveView": setActiveMenuView,
 				"prompt":        prompt,
 				"submitPrompt":  submitPrompt,
+				"runtime":       runtime,
 			}},
 		),
 		)

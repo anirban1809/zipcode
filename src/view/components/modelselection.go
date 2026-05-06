@@ -1,6 +1,9 @@
 package view
 
 import (
+	"fmt"
+
+	"zipcode/src/agent"
 	"zipcode/src/config"
 
 	"github.com/anirban1809/tuix/tuix"
@@ -20,6 +23,7 @@ func ModelSelection(props tuix.Props) tuix.Element {
 			"viewSize": 6,
 		}}, func(selected string) {
 			config.CurrentModel = selected
+			agent.EventManager.WriteToChannel(agent.NOTIFICATION_CHANNEL, fmt.Sprintf("Current model changed to: %s", selected))
 			setActiveView("")
 		}),
 		tuix.Text("Press Enter to confirm, Esc to cancel", tuix.NewStyle()),

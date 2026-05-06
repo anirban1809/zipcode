@@ -9,9 +9,9 @@ import (
 type Workspace struct {
 	RootPath      string
 	Config        Config
-	History       History
 	Metadata      Metadata
 	CurrentBranch string
+	Session       *Session
 }
 
 func Load(workspacePath string) Workspace {
@@ -19,6 +19,9 @@ func Load(workspacePath string) Workspace {
 		RootPath: workspacePath,
 	}
 	w.CurrentBranch = w.GetCurrentBranch()
+	if session, err := NewSession(workspacePath); err == nil {
+		w.Session = session
+	}
 	return w
 }
 

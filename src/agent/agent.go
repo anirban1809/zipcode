@@ -24,6 +24,16 @@ func NewAgent(systemPrompt string, tools *[]tools.Tool, llm *llm.OpenRouterProvi
 	}
 }
 
+func (a *Agent) RestoreConversation(messages []llm.Message) {
+	seeded := []llm.Message{{Role: "system", Content: a.SystemPrompt}}
+	seeded = append(seeded, messages...)
+	a.Conversation = llm.Conversation{
+		Messages: seeded,
+		Tools:    *a.Tools,
+	}
+	a.initial = true
+}
+
 func (a *Agent) RunStep(messages ...llm.Message) (*llm.Conversation, error) {
 	if !a.initial {
 		a.Conversation = llm.Conversation{

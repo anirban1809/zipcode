@@ -1,26 +1,25 @@
 # ZipCode
 
-A terminal-based AI assistant interface built with Go and the Bubble Tea framework. ZipCode provides a TUI (Terminal User Interface) for interacting with AI models through a clean, intuitive command-line interface.
+A terminal-based AI coding assistant built with Go and tuix. ZipCode provides a TUI (Terminal User Interface) for interacting with AI models through OpenRouter to perform code exploration, file manipulation, and task execution.
 
 ## Overview
 
-ZipCode is a single-binary Go application that simulates an AI assistant interface with:
-- Interactive terminal UI with command suggestions
-- Multiple AI model support (simulated)
-- Workspace management
-- Command system with autocomplete
-- Real-time status display
-- Responsive layout that adapts to terminal size
+ZipCode is a single-binary Go application that provides an AI coding assistant interface with:
+- Interactive terminal UI built with tuix
+- Real AI model integration via OpenRouter
+- Tool execution (file operations, shell commands, code search)
+- Sub-agent support for specialized tasks
+- Workspace awareness and management
 
 ## Features
 
-- **Terminal-first design**: Built with Bubble Tea for a smooth TUI experience
-- **Command system**: Slash commands with autocomplete and descriptions
-- **Model switching**: Switch between different AI models (Claude, Gemini, GPT)
-- **Workspace awareness**: Displays current working directory
-- **Interactive menus**: Navigate commands and models with keyboard
-- **Mock responses**: Simulated AI responses with spinner animation
-- **Usage tracking**: Displays session statistics (tokens, latency, uptime)
+- **Terminal-first design**: Built with tuix for a smooth TUI experience
+- **Real AI integration**: Connects to OpenRouter for LLM interactions
+- **Tool system**: Execute file operations, shell commands, and code searches
+- **Sub-agents**: Specialized agents for code exploration and bug investigation
+- **Multiple model support**: Switch between various AI models via OpenRouter
+- **Workspace management**: Track and manage the current working directory
+- **Interactive UI**: Command input, file diffs, status display
 
 ## Installation
 
@@ -85,33 +84,35 @@ make run
 - **Tab**: Select highlighted menu item
 - **Ctrl+C / q / Esc**: Quit application
 
-### Commands
-
-Type `/` to see available commands. Use arrow keys to navigate and Enter to execute:
-
-| Command | Description |
-|---------|-------------|
-| `/init` | Initialize the current workspace session |
-| `/models` | Open model picker and switch active model |
-| `/quit` | Exit the application |
-| `/help` | Show help and available command usage |
-| `/status` | Display current session and environment status |
-| `/config` | View or adjust mock configuration settings |
-| `/auth` | Manage mock authentication state |
-| `/sync` | Run a mock workspace sync operation |
-| `/deploy` | Start a mock deploy flow |
-| `/logs` | Show recent mock execution logs |
-| `/doctor` | Run mock diagnostics checks |
-| `/clear` | Clear the result/output area |
-| `/version` | Show application version details |
-| `/theme` | Switch UI theme options (mock) |
-
 ### Available Models
 
-- claude-4-sonnet
-- claude-4-opus  
-- gemini-2.0-flash
-- gpt-4.1
+ZipCode connects to OpenRouter and supports 17+ models including:
+- minimax/minimax-m2.5 (default)
+- openai/gpt-5.1
+- anthropic/claude-4.5
+- google/gemini-2.5-pro
+- deepseek/deepseek-chat
+- meta-llama/llama-4
+- And many more...
+
+### Tools
+
+The assistant can use various tools to help with tasks:
+
+| Tool | Description |
+|------|-------------|
+| `file_read` | Read file contents from the workspace |
+| `file_write` | Write or create files in the workspace |
+| `bash` | Execute shell commands |
+| `codesearch` | Search for code patterns in files |
+| `filesearch` | Find files by name pattern |
+
+### Sub-agents
+
+Specialized agents for complex tasks:
+
+- **code_explorer**: Analyze and understand codebase structure
+- **bug_investigator**: Identify bugs and suggest fixes
 
 ## Architecture
 
@@ -119,74 +120,68 @@ Type `/` to see available commands. Use arrow keys to navigate and Enter to exec
 
 ```
 zipcode/
-├── main.go              # Application entry point and TUI logic
-├── go.mod              # Go module definition
-├── Makefile            # Build and development targets
-├── bin/                # Compiled binaries
-├── dist/               # Release builds
-└── src/                # Source code packages
-    ├── ui/             # UI components and models
-    ├── tools/          # Utility tools and integrations
-    └── bootstrap/      # Application initialization
+├── main.go              # Application entry point
+├── go.mod               # Go module definition
+├── Makefile             # Build and development targets
+├── bin/                 # Compiled binaries
+└── src/
+    ├── agent/           # Core agent runtime and executor
+    ├── bootstrap/       # Application initialization and flags
+    ├── config/          # Configuration (models, paths)
+    ├── llm/             # LLM providers and prompts
+    ├── subagents/       # Sub-agent definitions
+    ├── tools/           # Tool implementations
+    ├── ui/              # Deprecated bubbletea UI
+    ├── utils/           # Utility functions
+    ├── view/            # tuix UI components
+    └── workspace/       # Workspace management
 ```
 
 ### Key Components
 
 #### Main Application (`main.go`)
-- **RootModel**: Main application model managing layout and terminal size
-- **model**: Core TUI model handling user input, commands, and display
-- **Command System**: Slash command parsing and execution
-- **Menu Navigation**: Interactive menus for commands and model selection
+- Initializes terminal size
+- Creates workspace from current directory
+- Initializes agent runtime
+- Launches tuix-based TUI application
 
-#### UI Framework
-- Built with **Bubble Tea** for reactive TUI
-- Uses **Lipgloss** for styling and layout
-- Responsive design that adapts to terminal dimensions
+#### Agent Runtime (`src/agent/`)
+- **Runtime**: Manages the tool-calling loop with LLM
+- **Executor**: Processes and executes tool calls
+- **Planner**: Coordinates task execution
 
-#### State Management
-- Workspace tracking
-- Current model selection
-- Command history and suggestions
-- Session statistics
+#### LLM Integration (`src/llm/`)
+- OpenRouter provider integration
+- Prompt management
+- Model configuration
+
+#### UI Framework (`src/view/`)
+- Built with **tuix** for reactive TUI
+- Uses **Lipgloss** for styling
+- Components: app, menu, prompt, statusline, filediff
 
 ## Dependencies
 
 ### Core Dependencies
-- `github.com/charmbracelet/bubbletea` - TUI framework
-- `github.com/charmbracelet/bubbles` - UI components (textinput, viewport)
-- `github.com/charmbracelet/lipgloss` - Styling and layout
+- `github.com/anirban1809/tuix` - TUI framework
 - `golang.org/x/term` - Terminal handling
 
 ### Development Dependencies
 - `golangci-lint` - Go linting and static analysis
 
-## Development
+## Configuration
 
-### Code Style
-
-The project follows standard Go conventions:
-- `go fmt` for code formatting
-- `golangci-lint` for static analysis
-- Clear separation of concerns between UI and business logic
-
-### Adding New Commands
-
-1. Add command to `commands` slice in `initialModel()`
-2. Add description to `commandDesc` map
-3. Handle command in `runCommand()` switch statement
-
-### Customizing Models
-
-Modify the `modelOptions` slice in `initialModel()` to add or remove AI models.
+Environment variables (see `.env`):
+- `OPENROUTER_API_KEY` - API key for OpenRouter
+- `OPENROUTER_BASE_URL` - Optional custom endpoint
+- Internal/external tool paths configured in `src/config/`
 
 ## Build Metadata
 
 The Makefile injects build metadata into the binary:
 - Version: Git tag or "dev"
-- Commit: Short Git hash or "none"  
+- Commit: Short Git hash or "none"
 - Build time: UTC timestamp
-
-This metadata is displayed in the application footer and can be used for debugging.
 
 ## License
 
@@ -195,12 +190,3 @@ This metadata is displayed in the application footer and can be used for debuggi
 ## Contributing
 
 [Add contribution guidelines here]
-
-## Roadmap
-
-- [ ] Real AI model integration
-- [ ] Configuration file support
-- [ ] Plugin system for extensions
-- [ ] Persistent history
-- [ ] Theme customization
-- [ ] Multi-language support

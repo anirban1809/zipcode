@@ -77,3 +77,8 @@ var EXTERNAL_TOOL_PATH = "~/.zipcode/tools"
 
 var INTERNAL_SUBAGENTS_PATH = "/Users/anirban/Documents/Code/zipcode/src/subagents"
 var EXTERNAL_SUBAGENTS_PATH = "~/.zipcode/tools"
+
+var INTERNAL_SKILLS_PATH = "/Users/anirban/Documents/Code/zipcode/src/skills/builtin"
+var GLOBAL_SKILLS_PATH = "~/.zipcode/skills"
+var PROJECT_SKILLS_PATH = ".zipcode/skills"
+var SKILLS_STATE_PATH = "~/.zipcode/skills.state.json"

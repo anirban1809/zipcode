@@ -43,6 +43,17 @@ func MainMenu(props tuix.Props) tuix.Element {
 		{Name: "/clear", Kind: CmdAction, Run: func() { /* clear outputs */ }},
 	}
 
+	if runtime != nil && runtime.SkillRegistry != nil {
+		for _, s := range runtime.SkillRegistry.ListEnabled() {
+			name := "/" + s.Name
+			commands = append(commands, Command{
+				Name:   name,
+				Kind:   CmdPrompt,
+				Prompt: name,
+			})
+		}
+	}
+
 	findCommand := func(selected string) Command {
 		var toFind Command
 		for _, command := range commands {
@@ -67,7 +78,11 @@ func MainMenu(props tuix.Props) tuix.Element {
 		"visible":       activeView == "/models",
 	}})
 
-	skillsView := view.Skills(tuix.Props{})
+	skillsView := view.Skills(tuix.Props{Values: map[string]any{
+		"setActiveView": setActiveView,
+		"visible":       activeView == "/skills",
+		"runtime":       runtime,
+	}})
 	agentsView := view.Agent(tuix.Props{})
 	sessionsView := view.Sessions(tuix.Props{Values: map[string]any{
 		"setActiveView": setActiveView,

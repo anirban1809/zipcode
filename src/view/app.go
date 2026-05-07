@@ -22,6 +22,7 @@ func App(props tuix.Props) tuix.Element {
 	livePromptIdx, setLivePromptIdx := tuix.UseState(-1)
 	activeMenuView, setActiveMenuView := tuix.UseState("")
 	notification, setNotification := tuix.UseState("")
+	activeSkillName, setActiveSkillName := tuix.UseState("")
 
 	questionVisible, setQuestionVisible := tuix.UseState(false)
 	question, setQuestion := tuix.UseState(struct {
@@ -37,13 +38,19 @@ func App(props tuix.Props) tuix.Element {
 	menuVisible := strings.HasPrefix(prompt, "/")
 
 	submitPrompt := func(p string) {
+		send := p
+		if name, _, ok := runtime.ParseSkillCommand(p); ok {
+			send = runtime.ExpandSkillCommand(p)
+			runtime.Executor.SetActiveSkill(name)
+			setActiveSkillName(name)
+		}
 		promptChan <- p
 		agent.EventManager.WriteToChannel(agent.NOTIFICATION_CHANNEL, "")
 		setPrompt("")
 		if !activeSession {
 			setActiveSession(true)
 		}
-		go runtime.Run(p)
+		go runtime.Run(send)
 	}
 
 	if tuix.CurrentKey.Code == tuix.KeyEnter && !activeSession && !menuVisible {
@@ -53,6 +60,7 @@ func App(props tuix.Props) tuix.Element {
 	tuix.UseEffect(func() func() {
 		go func() {
 			var activeSubAgent string
+			var activeSkill string
 			agentOut := make(chan agent.ResponseEvent)
 			go func() {
 				for {
@@ -108,7 +116,21 @@ func App(props tuix.Props) tuix.Element {
 								msg = fmt.Sprintf("  └──%s", msg)
 								style = style.Foreground(tuix.Hex("#848484"))
 							}
+						} else if ev.SkillName != "" {
+							if activeSkill != ev.SkillName {
+								activeSkill = ev.SkillName
+								setActiveSkillName(ev.SkillName)
+								msg = fmt.Sprintf("    \n[/%s]\n  └──%s", ev.SkillName, msg)
+								style = style.Foreground(tuix.Hex("#b39ddb")).Bold(true)
+							} else {
+								msg = fmt.Sprintf("  └──%s", msg)
+								style = style.Foreground(tuix.Hex("#848484"))
+							}
 						} else {
+							if activeSkill != "" {
+								setActiveSkillName("")
+							}
+							activeSkill = ""
 							msg = fmt.Sprintf("  └──%s", msg)
 							style = style.Foreground(tuix.Hex("#848484"))
 						}
@@ -232,6 +254,7 @@ func App(props tuix.Props) tuix.Element {
 			"outputTokens":          runtime.OutputTokens,
 			"branch":                runtime.Workspace.GetCurrentBranch(),
 			"hasUncommittedChanges": runtime.Workspace.HasUncommittedChanges(),
+			"activeSkill":           activeSkillName,
 		},
 	}))
 

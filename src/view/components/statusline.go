@@ -14,6 +14,10 @@ func StatusLine(props tuix.Props) tuix.Element {
 		status = "Running"
 	}
 
+	if skill, _ := props.Get("activeSkill").(string); skill != "" {
+		status = fmt.Sprintf("Running /%s", skill)
+	}
+
 	branch := "main"
 	if v, ok := props.Get("branch").(string); ok && v != "" {
 		branch = v

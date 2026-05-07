@@ -28,6 +28,7 @@ type ResponseEvent struct {
 	Message      string
 	SubAgent     bool
 	SubAgentName string
+	SkillName    string
 }
 
 type FileChangeType int
@@ -52,10 +53,15 @@ type Executor struct {
 	Tools           []tools.Tool
 	SubAgentRunning bool
 	SubAgent        string
+	ActiveSkill     string
 }
 
 func (e *Executor) IsSubagentTool(name string) bool {
 	return strings.HasPrefix(name, "subagent")
+}
+
+func (e *Executor) IsSkillTool(name string) bool {
+	return name == "invoke_skill"
 }
 
 func NewExecutor(systemPrompt string, tools []tools.Tool) *Executor {
@@ -109,6 +115,7 @@ const (
 	ActionMessage  ExecutionActionType = "message"
 	ActionToolCall ExecutionActionType = "tool_call"
 	ActionSubagent ExecutionActionType = "subagent"
+	ActionSkill    ExecutionActionType = "skill"
 	ActionComplete ExecutionActionType = "complete"
 )
 
@@ -121,6 +128,10 @@ type ExecutionAction struct {
 func (e *Executor) SetSubAgentModeOn(mode bool, name string) {
 	e.SubAgent = name
 	e.SubAgentRunning = mode
+}
+
+func (e *Executor) SetActiveSkill(name string) {
+	e.ActiveSkill = name
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, ExecutionResultStatus, error) {
@@ -157,6 +168,10 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, Exe
 				actionType = ActionSubagent
 			}
 
+			if e.IsSkillTool(tool.Name) {
+				actionType = ActionSkill
+			}
+
 			results = append(results, ExecutionAction{Type: actionType, ToolCall: &tool})
 
 		}
@@ -177,6 +192,7 @@ func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
 		Message:      value,
 		SubAgent:     e.SubAgentRunning,
 		SubAgentName: e.SubAgent,
+		SkillName:    e.ActiveSkill,
 	})
 }
 

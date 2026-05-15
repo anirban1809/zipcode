@@ -14,6 +14,7 @@ import (
 )
 
 var promptChan = make(chan string)
+var clearOutputsChan = make(chan struct{}, 1)
 
 func App(props tuix.Props) tuix.Element {
 	prompt, setPrompt := tuix.UseState("")
@@ -106,12 +107,10 @@ func App(props tuix.Props) tuix.Element {
 						continue
 					}
 
-					if !(notif.Type == agent.ERROR) {
-						continue
-					}
-
-					agentOut <- agent.ResponseEvent{
-						EventType: agent.Error,
+					if notif.Type == agent.ERROR {
+						agentOut <- agent.ResponseEvent{
+							EventType: agent.Error,
+						}
 					}
 					setNotification(notif)
 				}
@@ -122,6 +121,15 @@ func App(props tuix.Props) tuix.Element {
 			promptIdx := -1
 			for {
 				select {
+
+				case <-clearOutputsChan:
+					acc = acc[:0]
+					liveLocal = ""
+					promptIdx = -1
+					setLivePrompt("")
+					setLivePromptIdx(-1)
+					setOutputs(nil)
+					continue
 
 				case p := <-promptChan:
 					liveLocal = p
@@ -192,7 +200,7 @@ func App(props tuix.Props) tuix.Element {
 							}
 							acc = append(acc[:promptIdx], append([]tuix.Element{promptEl}, acc[promptIdx:]...)...)
 							// appending an empty line to reduce cluttering
-							// acc = append(acc, tuix.Text("", tuix.NewStyle()))
+							acc = append(acc, tuix.Text("", tuix.NewStyle()))
 							liveLocal = ""
 							promptIdx = -1
 							setLivePrompt("")
@@ -208,7 +216,7 @@ func App(props tuix.Props) tuix.Element {
 							tuix.Box(
 								tuix.Props{Padding: [4]int{0, 2, 0, 2}},
 								tuix.NewStyle(),
-								tuix.MultilineText(
+								tuix.WrappedText(
 									msg,
 									style,
 								),
@@ -333,6 +341,15 @@ func App(props tuix.Props) tuix.Element {
 						"prompt":         prompt,
 						"submitPrompt":   submitPrompt,
 						"setFocusPrompt": setFocusPrompt,
+						"clearPrompt": func() {
+							setPrompt("")
+						},
+						"clearOutputs": func() {
+							select {
+							case clearOutputsChan <- struct{}{}:
+							default:
+							}
+						},
 					}},
 				),
 				)

@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"zipcode/src/agent"
 	"zipcode/src/utils"
 	view "zipcode/src/view/components"
 	"zipcode/src/view/viewctx"
@@ -33,6 +34,16 @@ func MainMenu(props tuix.Props) tuix.Element {
 	prompt := props.Get("prompt").(string)
 	context := tuix.UseContext(viewctx.MainContext)
 	setFocusPrompt := props.Get("setFocusPrompt").(func(bool))
+	clearPrompt, _ := props.Get("clearPrompt").(func())
+	clearOutputs, _ := props.Get("clearOutputs").(func())
+
+	dismissMenu := func() {
+		if clearPrompt != nil {
+			clearPrompt()
+		}
+		setActiveView("")
+		setFocusPrompt(true)
+	}
 
 	commands := []Command{
 		{Name: "/models", Kind: CmdView},
@@ -46,7 +57,55 @@ func MainMenu(props tuix.Props) tuix.Element {
 			Prompt: "Tell me about this project.",
 		},
 		{Name: "/exit", Kind: CmdAction, Run: func() { os.Exit(0) }},
-		{Name: "/clear", Kind: CmdAction, Run: func() { /* clear outputs */ }},
+		{Name: "/clear", Kind: CmdAction, Run: func() {
+			if context.Runtime != nil {
+				context.Runtime.Clear()
+			}
+			if clearOutputs != nil {
+				clearOutputs()
+			}
+			dismissMenu()
+			agent.EventManager.WriteToChannel(
+				agent.NOTIFICATION_CHANNEL,
+				agent.Notification{
+					Type:    agent.INFO,
+					Message: "Conversation cleared.",
+				},
+			)
+		}},
+		{Name: "/compact", Kind: CmdAction, Run: func() {
+			if context.Runtime == nil {
+				return
+			}
+			runtime := context.Runtime
+			dismissMenu()
+			go func() {
+				agent.EventManager.WriteToChannel(
+					agent.NOTIFICATION_CHANNEL,
+					agent.Notification{
+						Type:    agent.INFO,
+						Message: "Compacting conversation...",
+					},
+				)
+				if _, err := runtime.Compact(); err != nil {
+					agent.EventManager.WriteToChannel(
+						agent.NOTIFICATION_CHANNEL,
+						agent.Notification{
+							Type:    agent.ERROR,
+							Message: "Compact failed: " + err.Error(),
+						},
+					)
+					return
+				}
+				agent.EventManager.WriteToChannel(
+					agent.NOTIFICATION_CHANNEL,
+					agent.Notification{
+						Type:    agent.INFO,
+						Message: "Conversation compacted.",
+					},
+				)
+			}()
+		}},
 		{Name: "/providers", Kind: CmdView},
 	}
 

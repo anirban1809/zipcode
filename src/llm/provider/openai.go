@@ -148,21 +148,29 @@ func (p OpenAI) Complete(request ChatRequest) (ChatResponse, error) {
 }
 
 func (p OpenAI) Models() []ModelDescriptor {
-	ids := []string{
-		"gpt-5.2",
-		"gpt-5.5",
-		"gpt-5.4",
-		"gpt-5.4-nano",
-		"gpt-5.3-codex",
-		"gpt-5.1-codex-mini",
-		"gpt-5-nano",
+	entries := []struct {
+		id            string
+		contextWindow int
+		inputCost     float64
+		outputCost    float64
+	}{
+		{"gpt-5.2", 400_000, 1.75, 14.00},
+		{"gpt-5.5", 1_000_000, 5.00, 30.00},
+		{"gpt-5.4", 272_000, 2.50, 15.00},
+		{"gpt-5.4-nano", 400_000, 0.20, 1.25},
+		{"gpt-5.3-codex", 400_000, 1.75, 14.00},
+		{"gpt-5.1-codex-mini", 400_000, 0.25, 2.00},
+		{"gpt-5-nano", 400_000, 0.05, 0.40},
 	}
-	descriptors := make([]ModelDescriptor, len(ids))
-	for i, id := range ids {
+	descriptors := make([]ModelDescriptor, len(entries))
+	for i, e := range entries {
 		descriptors[i] = ModelDescriptor{
-			ID:           id,
-			DisplayName:  id,
-			ProviderName: string(OpenAIProvider),
+			ID:                   e.id,
+			DisplayName:          e.id,
+			ProviderName:         string(OpenAIProvider),
+			ContextWindow:        e.contextWindow,
+			InputCostPerMillion:  e.inputCost,
+			OutputCostPerMillion: e.outputCost,
 		}
 	}
 	return descriptors

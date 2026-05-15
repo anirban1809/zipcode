@@ -25,6 +25,12 @@ const (
 	Cancelled
 )
 
+// AutoCompactThreshold is the input-token count above which Run will
+// trigger a context compaction before processing the next prompt.
+const AutoCompactThreshold = 200000
+
+const compactSummarizationPrompt = "Provide a concise but thorough summary of the conversation above. Preserve key context, decisions made, files touched, user preferences expressed, and the current state of any in-progress work. The summary will replace the full transcript so that the conversation can continue without losing context."
+
 type RuntimeEvent string
 
 type Runtime struct {
@@ -163,6 +169,122 @@ func (r *Runtime) persistSessionHistory() {
 	}
 	r.Workspace.Session.Messages = messages
 	_ = r.Workspace.Session.Save()
+}
+
+// maybeAutoCompact triggers a compaction if the most recent API call's input
+// token count exceeded AutoCompactThreshold. Failures are surfaced as
+// notifications so the run can continue with the uncompacted history.
+func (r *Runtime) maybeAutoCompact() {
+	if r.ChildRuntime {
+		return
+	}
+	if r.Agent.Conversation.Usage.InputTokens <= AutoCompactThreshold {
+		return
+	}
+
+	go EventManager.WriteToChannel(
+		NOTIFICATION_CHANNEL,
+		Notification{
+			Type:    INFO,
+			Message: "Context exceeded auto-compact threshold; compacting conversation...",
+		},
+	)
+
+	if _, err := r.Compact(); err != nil {
+		go EventManager.WriteToChannel(
+			NOTIFICATION_CHANNEL,
+			Notification{
+				Type: ERROR,
+				Message: fmt.Sprintf(
+					"Auto-compact failed: %s",
+					err.Error(),
+				),
+			},
+		)
+		return
+	}
+
+	go EventManager.WriteToChannel(
+		NOTIFICATION_CHANNEL,
+		Notification{
+			Type:    INFO,
+			Message: "Conversation compacted.",
+		},
+	)
+}
+
+// Clear resets the conversation history back to just the system prompt and
+// zeroes accumulated token counters. The session file is updated to match.
+func (r *Runtime) Clear() {
+	systemPrompt := r.Agent.SystemPrompt
+	r.Agent.Conversation.Messages = []llm.Message{
+		{Role: "system", Content: systemPrompt},
+	}
+	r.Agent.Conversation.Usage = llm.Usage{}
+	r.InputTokens = 0
+	r.OutputTokens = 0
+	r.persistSessionHistory()
+}
+
+// Compact asks the active provider to summarize the current conversation and
+// replaces the message history with that summary, preserving the system prompt.
+// Returns the summary text (or an empty string and error if compaction fails).
+func (r *Runtime) Compact() (string, error) {
+	if config.Cfg.ActiveProviderName == "" {
+		return "", fmt.Errorf("no active provider configured")
+	}
+
+	provider := r.Registry.GetProvider(
+		llm.ProviderName(config.Cfg.ActiveProviderName),
+	)
+	if provider == nil {
+		return "", fmt.Errorf(
+			"provider %q not registered",
+			config.Cfg.ActiveProviderName,
+		)
+	}
+
+	msgs := r.Agent.Conversation.Messages
+	if len(msgs) <= 1 {
+		return "", nil
+	}
+
+	requestMessages := append([]llm.Message{}, msgs...)
+	requestMessages = append(requestMessages, llm.Message{
+		Role:    "user",
+		Content: compactSummarizationPrompt,
+	})
+
+	resp, err := provider.Complete(llm.ChatRequest{
+		Model:    config.Cfg.CurrentModel,
+		Messages: requestMessages,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	summary := strings.TrimSpace(resp.Message.Content)
+	if summary == "" {
+		return "", fmt.Errorf("provider returned empty summary")
+	}
+
+	r.Agent.Conversation.Messages = []llm.Message{
+		{Role: "system", Content: r.Agent.SystemPrompt},
+		{
+			Role:    "user",
+			Content: "Summary of prior conversation:\n\n" + summary,
+		},
+		{
+			Role:    "assistant",
+			Content: "Understood. I have the summary of our prior conversation and will continue from here.",
+		},
+	}
+	r.Agent.Conversation.Usage = llm.Usage{}
+	r.InputTokens = 0
+	r.OutputTokens = 0
+
+	r.persistSessionHistory()
+	return summary, nil
 }
 
 type SubAgentRequest struct {
@@ -450,6 +572,8 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 	r.Status = Running
 	r.Prompt = prompt
 	r.refreshSystemPrompt()
+
+	r.maybeAutoCompact()
 
 	conv, err := r.Agent.RunStep(llm.Message{
 		Role:    "user",

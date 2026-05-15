@@ -49,11 +49,14 @@ func GetProviderName(provider string) (ProviderName, error) {
 }
 
 type ModelDescriptor struct {
-	ID            string
-	DisplayName   string
-	ProviderName  string
-	ContextWindow string
-	Effort        string
+	ID                    string
+	DisplayName           string
+	ProviderName          string
+	ContextWindow         int
+	Effort                string
+	// USD per 1M tokens.
+	InputCostPerMillion  float64
+	OutputCostPerMillion float64
 }
 
 type BlockType string

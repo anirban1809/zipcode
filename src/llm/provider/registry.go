@@ -23,3 +23,32 @@ func (r Registry) GetProvider(name ProviderName) Provider {
 func (r Registry) ProviderList() []ProviderName {
 	return []ProviderName{OpenAIProvider, OpenRouterAPIProvider, AnthropicProvider}
 }
+
+func (r Registry) ContextWindowFor(providerName ProviderName, modelID string) int {
+	provider := r.GetProvider(providerName)
+	if provider == nil {
+		return 0
+	}
+	for _, m := range provider.Models() {
+		if m.ID == modelID {
+			return m.ContextWindow
+		}
+	}
+	return 0
+}
+
+// CostFor returns the input/output cost per 1M tokens (USD) for the given
+// provider+model. Returns zeros if the model is not registered or pricing
+// is unknown.
+func (r Registry) CostFor(providerName ProviderName, modelID string) (inputPerMillion, outputPerMillion float64) {
+	provider := r.GetProvider(providerName)
+	if provider == nil {
+		return 0, 0
+	}
+	for _, m := range provider.Models() {
+		if m.ID == modelID {
+			return m.InputCostPerMillion, m.OutputCostPerMillion
+		}
+	}
+	return 0, 0
+}

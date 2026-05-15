@@ -179,32 +179,40 @@ func (p OpenRouterProvider) IsQuotaError(
 }
 
 func (p OpenRouterProvider) Models() []ModelDescriptor {
-	ids := []string{
-		"openai/gpt-5.2",
-		"openai/gpt-5.5",
-		"minimax/minimax-m2.5",
-		"minimax/minimax-m2.7",
-		"anthropic/claude-sonnet-4.6",
-		"anthropic/claude-haiku-4.5",
-		"openai/gpt-5.1-codex-mini",
-		"moonshotai/kimi-k2.5",
-		"meta-llama/llama-3.3-70b-instruct",
-		"z-ai/glm-4.7",
-		"qwen/qwen3-coder-flash",
-		"openai/gpt-5-nano",
-		"z-ai/glm-5",
-		"openai/gpt-5.4-nano",
-		"deepseek/deepseek-v3.2",
-		"openai/gpt-5.4",
-		"openai/gpt-5.3-codex",
-		"z-ai/glm-5v-turbo",
+	entries := []struct {
+		id            string
+		contextWindow int
+		inputCost     float64
+		outputCost    float64
+	}{
+		{"openai/gpt-5.2", 400_000, 1.75, 14.00},
+		{"openai/gpt-5.5", 1_000_000, 5.00, 30.00},
+		{"minimax/minimax-m2.5", 196_608, 0.15, 1.15},
+		{"minimax/minimax-m2.7", 196_608, 0.279, 1.20},
+		{"anthropic/claude-sonnet-4.6", 1_000_000, 3.00, 15.00},
+		{"anthropic/claude-haiku-4.5", 200_000, 1.00, 5.00},
+		{"openai/gpt-5.1-codex-mini", 400_000, 0.25, 2.00},
+		{"moonshotai/kimi-k2.5", 262_144, 0.40, 1.90},
+		{"meta-llama/llama-3.3-70b-instruct", 128_000, 0.10, 0.32},
+		{"z-ai/glm-4.7", 200_000, 0.40, 1.75},
+		{"qwen/qwen3-coder-flash", 1_000_000, 0.195, 0.975},
+		{"openai/gpt-5-nano", 400_000, 0.05, 0.40},
+		{"z-ai/glm-5", 200_000, 0.60, 1.92},
+		{"openai/gpt-5.4-nano", 400_000, 0.20, 1.25},
+		{"deepseek/deepseek-v3.2", 200_000, 0.252, 0.378},
+		{"openai/gpt-5.4", 272_000, 2.50, 15.00},
+		{"openai/gpt-5.3-codex", 400_000, 1.75, 14.00},
+		{"z-ai/glm-5v-turbo", 202_752, 1.20, 4.00},
 	}
-	descriptors := make([]ModelDescriptor, len(ids))
-	for i, id := range ids {
+	descriptors := make([]ModelDescriptor, len(entries))
+	for i, e := range entries {
 		descriptors[i] = ModelDescriptor{
-			ID:           id,
-			DisplayName:  id,
-			ProviderName: string(OpenRouterAPIProvider),
+			ID:                   e.id,
+			DisplayName:          e.id,
+			ProviderName:         string(OpenRouterAPIProvider),
+			ContextWindow:        e.contextWindow,
+			InputCostPerMillion:  e.inputCost,
+			OutputCostPerMillion: e.outputCost,
 		}
 	}
 	return descriptors

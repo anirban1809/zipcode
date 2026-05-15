@@ -3,11 +3,14 @@ package view
 import (
 	"fmt"
 	"zipcode/src/config"
+	llm "zipcode/src/llm/provider"
+	"zipcode/src/view/viewctx"
 
 	"github.com/anirban1809/tuix/tuix"
 )
 
 func StatusLine(props tuix.Props) tuix.Element {
+	context := tuix.UseContext(viewctx.MainContext)
 	workspacePath, _ := props.Get("workspacePath").(string)
 	status := "Idle"
 	if running, _ := props.Get("running").(bool); running {
@@ -46,6 +49,8 @@ func StatusLine(props tuix.Props) tuix.Element {
 
 	var providerName string
 	var modelName string
+	contextWindow := 0
+	var inputCostPerM, outputCostPerM float64
 
 	if config.Cfg.ActiveProviderName == "" {
 		providerName = "Unconfigured"
@@ -53,6 +58,34 @@ func StatusLine(props tuix.Props) tuix.Element {
 	} else {
 		providerName = string(config.Cfg.ActiveProviderName)
 		modelName = config.Cfg.CurrentModel
+		if context != nil && context.Runtime != nil {
+			contextWindow = context.Runtime.Registry.ContextWindowFor(
+				llm.ProviderName(config.Cfg.ActiveProviderName),
+				config.Cfg.CurrentModel,
+			)
+			inputCostPerM, outputCostPerM = context.Runtime.Registry.CostFor(
+				llm.ProviderName(config.Cfg.ActiveProviderName),
+				config.Cfg.CurrentModel,
+			)
+		}
+	}
+
+	sessionCost := (float64(inputTokens)*inputCostPerM +
+		float64(outputTokens)*outputCostPerM) / 1_000_000
+	var costText string
+	if inputCostPerM > 0 || outputCostPerM > 0 {
+		costText = fmt.Sprintf(" | $%.4f", sessionCost)
+	}
+
+	var contextPctText string
+	if contextWindow > 0 {
+		contextPctText = fmt.Sprintf(
+			"Context: %0.2f%% (of %d)",
+			float32(totalTokens*100)/float32(contextWindow),
+			contextWindow,
+		)
+	} else {
+		contextPctText = "Context: -"
 	}
 
 	line1 := tuix.Box(
@@ -64,10 +97,11 @@ func StatusLine(props tuix.Props) tuix.Element {
 		),
 		tuix.Text(
 			fmt.Sprintf(
-				"Tokens:  %d\u2191 / %d\u2193 (%d)",
+				"Tokens:  %d\u2191 / %d\u2193 (%d)%s",
 				inputTokens,
 				outputTokens,
 				totalTokens,
+				costText,
 			),
 			tuix.NewStyle(),
 		),
@@ -78,14 +112,14 @@ func StatusLine(props tuix.Props) tuix.Element {
 		tuix.NewStyle(),
 		tuix.Text(
 			fmt.Sprintf(
-				"Provider: %s . Model: %s",
+				"Provider: %s | Model: %s",
 				providerName,
 				modelName,
 			),
 			tuix.NewStyle(),
 		),
 		tuix.Text(
-			fmt.Sprintf("Context: %0.2f%%", float32((totalTokens*100)/200000)),
+			contextPctText,
 			tuix.NewStyle(),
 		),
 	)

@@ -222,17 +222,25 @@ func (p Anthropic) Complete(request ChatRequest) (ChatResponse, error) {
 }
 
 func (p Anthropic) Models() []ModelDescriptor {
-	ids := []string{
-		"claude-opus-4-7",
-		"claude-sonnet-4-6",
-		"claude-haiku-4-5-20251001",
+	entries := []struct {
+		id            string
+		contextWindow int
+		inputCost     float64
+		outputCost    float64
+	}{
+		{"claude-opus-4-7", 1_000_000, 5.00, 25.00},
+		{"claude-sonnet-4-6", 1_000_000, 3.00, 15.00},
+		{"claude-haiku-4-5-20251001", 200_000, 1.00, 5.00},
 	}
-	descriptors := make([]ModelDescriptor, len(ids))
-	for i, id := range ids {
+	descriptors := make([]ModelDescriptor, len(entries))
+	for i, e := range entries {
 		descriptors[i] = ModelDescriptor{
-			ID:           id,
-			DisplayName:  id,
-			ProviderName: string(AnthropicProvider),
+			ID:                   e.id,
+			DisplayName:          e.id,
+			ProviderName:         string(AnthropicProvider),
+			ContextWindow:        e.contextWindow,
+			InputCostPerMillion:  e.inputCost,
+			OutputCostPerMillion: e.outputCost,
 		}
 	}
 	return descriptors

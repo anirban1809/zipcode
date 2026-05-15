@@ -7,11 +7,12 @@ import (
 )
 
 type Workspace struct {
-	RootPath      string
-	Config        Config
-	Metadata      Metadata
-	CurrentBranch string
-	Session       *Session
+	RootPath          string
+	Config            Config
+	Metadata          Metadata
+	CurrentBranch     string
+	Session           *Session
+	FileTreeSnapshot  string
 }
 
 func Load(workspacePath string) Workspace {
@@ -19,6 +20,7 @@ func Load(workspacePath string) Workspace {
 		RootPath: workspacePath,
 	}
 	w.CurrentBranch = w.GetCurrentBranch()
+	w.FileTreeSnapshot = w.FileTree()
 	if session, err := NewSession(workspacePath); err == nil {
 		w.Session = session
 	}

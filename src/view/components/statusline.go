@@ -29,12 +29,19 @@ func StatusLine(props tuix.Props) tuix.Element {
 	hasUncommittedChanges := props.Get("hasUncommittedChanges").(bool)
 
 	inputTokens := 0
+	cachedInputTokens := 0
 	outputTokens := 0
 	if v, ok := props.Get("inputTokens").(int); ok {
 		inputTokens = v
 	}
+	if v, ok := props.Get("cachedInputTokens").(int); ok {
+		cachedInputTokens = v
+	}
 	if v, ok := props.Get("outputTokens").(int); ok {
 		outputTokens = v
+	}
+	if cachedInputTokens > inputTokens {
+		cachedInputTokens = inputTokens
 	}
 	totalTokens := inputTokens + outputTokens
 
@@ -70,7 +77,12 @@ func StatusLine(props tuix.Props) tuix.Element {
 		}
 	}
 
-	sessionCost := (float64(inputTokens)*inputCostPerM +
+	// Cache reads bill at ~10% of the input rate on both Anthropic and OpenAI;
+	// keep that as a single constant rather than tracking per-model rates.
+	const cachedInputDiscount = 0.10
+	uncachedInputTokens := inputTokens - cachedInputTokens
+	sessionCost := (float64(uncachedInputTokens)*inputCostPerM +
+		float64(cachedInputTokens)*inputCostPerM*cachedInputDiscount +
 		float64(outputTokens)*outputCostPerM) / 1_000_000
 	var costText string
 	if inputCostPerM > 0 || outputCostPerM > 0 {

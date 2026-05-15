@@ -75,8 +75,11 @@ type openAIResponse struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		PromptTokensDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
 	} `json:"usage"`
 }
 
@@ -136,8 +139,9 @@ func (p OpenAI) Complete(request ChatRequest) (ChatResponse, error) {
 		ID:    parsed.ID,
 		Model: parsed.Model,
 		Usage: Usage{
-			InputTokens:  parsed.Usage.PromptTokens,
-			OutputTokens: parsed.Usage.CompletionTokens,
+			InputTokens:       parsed.Usage.PromptTokens,
+			CachedInputTokens: parsed.Usage.PromptTokensDetails.CachedTokens,
+			OutputTokens:      parsed.Usage.CompletionTokens,
 		},
 		Message: Message{
 			Role:      parsed.Choices[0].Message.Role,

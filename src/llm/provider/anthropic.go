@@ -74,8 +74,10 @@ type anthropicResponse struct {
 	Content    []anthropicContentBlock `json:"content"`
 	StopReason string                  `json:"stop_reason"`
 	Usage      struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens              int `json:"input_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	} `json:"usage"`
 	Error *struct {
 		Type    string `json:"type"`
@@ -210,8 +212,15 @@ func (p Anthropic) Complete(request ChatRequest) (ChatResponse, error) {
 		Model:      parsed.Model,
 		StopReason: parsed.StopReason,
 		Usage: Usage{
-			InputTokens:  parsed.Usage.InputTokens,
-			OutputTokens: parsed.Usage.OutputTokens,
+			// Normalize so InputTokens represents *total* input (matches OpenAI
+			// semantics) while CachedInputTokens is the cached-read portion.
+			// Anthropic's cache_creation is folded into the regular input
+			// bucket; we don't currently price it separately.
+			InputTokens: parsed.Usage.InputTokens +
+				parsed.Usage.CacheCreationInputTokens +
+				parsed.Usage.CacheReadInputTokens,
+			CachedInputTokens: parsed.Usage.CacheReadInputTokens,
+			OutputTokens:      parsed.Usage.OutputTokens,
 		},
 		Message: Message{
 			Role:      role,

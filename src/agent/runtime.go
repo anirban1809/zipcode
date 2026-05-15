@@ -39,11 +39,12 @@ type Runtime struct {
 	Status          RuntimeStatus
 	Registry        llm.Registry
 	CurrentProvider llm.Provider
-	Workspace       *workspace.Workspace
-	Tools           []tools.Tool
-	InputTokens     int
-	OutputTokens    int
-	Conversation    llm.Conversation
+	Workspace         *workspace.Workspace
+	Tools             []tools.Tool
+	InputTokens       int
+	CachedInputTokens int
+	OutputTokens      int
+	Conversation      llm.Conversation
 	Agent           Agent
 	Session         string
 	ChildRuntime    bool
@@ -222,6 +223,7 @@ func (r *Runtime) Clear() {
 	}
 	r.Agent.Conversation.Usage = llm.Usage{}
 	r.InputTokens = 0
+	r.CachedInputTokens = 0
 	r.OutputTokens = 0
 	r.persistSessionHistory()
 }
@@ -281,6 +283,7 @@ func (r *Runtime) Compact() (string, error) {
 	}
 	r.Agent.Conversation.Usage = llm.Usage{}
 	r.InputTokens = 0
+	r.CachedInputTokens = 0
 	r.OutputTokens = 0
 
 	r.persistSessionHistory()
@@ -511,11 +514,21 @@ func (r *Runtime) skillSummaries() []prompts.SkillSummary {
 	return out
 }
 
+func (r *Runtime) workspaceContext() prompts.WorkspaceContext {
+	if r.Workspace == nil {
+		return prompts.WorkspaceContext{}
+	}
+	return prompts.WorkspaceContext{
+		RootPath: r.Workspace.RootPath,
+		FileTree: r.Workspace.FileTreeSnapshot,
+	}
+}
+
 func (r *Runtime) refreshSystemPrompt() {
 	if r.ChildRuntime {
 		return
 	}
-	prompt := prompts.BuildSystemPrompt(r.skillSummaries())
+	prompt := prompts.BuildSystemPrompt(r.workspaceContext(), r.skillSummaries())
 	r.Agent.SystemPrompt = prompt
 	if len(r.Agent.Conversation.Messages) > 0 &&
 		r.Agent.Conversation.Messages[0].Role == "system" {
@@ -665,6 +678,7 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		}
 
 		r.InputTokens += conv.Usage.InputTokens
+		r.CachedInputTokens += conv.Usage.CachedInputTokens
 		r.OutputTokens += conv.Usage.OutputTokens
 	}
 

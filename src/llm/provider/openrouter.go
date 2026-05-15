@@ -89,8 +89,11 @@ type OpenRouterResponse struct {
 	Choices           []Choices `json:"choices"`
 	SystemFingerprint string    `json:"system_fingerprint"`
 	Usage             struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		PromptTokensDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
 	} `json:"usage"`
 }
 type ReasoningDetails struct {
@@ -294,6 +297,7 @@ func (p *OpenRouterProvider) Complete(
 	chatResponse.Model = finalResponse.Model
 	chatResponse.ID = finalResponse.ID
 	chatResponse.Usage.InputTokens = finalResponse.Usage.PromptTokens
+	chatResponse.Usage.CachedInputTokens = finalResponse.Usage.PromptTokensDetails.CachedTokens
 	chatResponse.Usage.OutputTokens = finalResponse.Usage.CompletionTokens
 	chatResponse.Message.Role = finalResponse.Choices[0].Message.Role
 	chatResponse.Message.Content = finalResponse.Choices[0].Message.Content

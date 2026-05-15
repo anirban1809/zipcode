@@ -103,6 +103,10 @@ type Message struct {
 	Content    string     `json:"content"`
 	ToolCalls  []ToolCall `json:"tool_calls"`
 	ToolCallId string     `json:"tool_call_id,omitempty"`
+	// Usage is the API-reported token usage for the call that produced this
+	// message. Only set on assistant messages returned by the provider; nil
+	// for user/tool/system messages.
+	Usage *Usage `json:"usage,omitempty"`
 }
 
 type ContextUsage struct {
@@ -120,8 +124,9 @@ type ChatRequest struct {
 }
 
 type Usage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens       int `json:"input_tokens"`
+	CachedInputTokens int `json:"cached_input_tokens"`
+	OutputTokens      int `json:"output_tokens"`
 }
 
 type ChatResponse struct {

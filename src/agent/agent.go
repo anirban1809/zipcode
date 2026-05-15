@@ -114,6 +114,8 @@ func (a *Agent) Chat(prev *llm.Conversation) (*llm.Conversation, error) {
 		return nil, err
 	}
 
+	usage := value.Usage
+	value.Message.Usage = &usage
 	prev.Messages = append(prev.Messages, value.Message)
 	prev.Usage = value.Usage
 

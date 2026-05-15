@@ -362,6 +362,7 @@ func App(props tuix.Props) tuix.Element {
 					),
 					"running":               activeSession,
 					"inputTokens":           runtime.InputTokens,
+					"cachedInputTokens":     runtime.CachedInputTokens,
 					"outputTokens":          runtime.OutputTokens,
 					"branch":                runtime.Workspace.GetCurrentBranch(),
 					"hasUncommittedChanges": runtime.Workspace.HasUncommittedChanges(),

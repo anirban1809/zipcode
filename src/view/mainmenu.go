@@ -50,6 +50,7 @@ func MainMenu(props tuix.Props) tuix.Element {
 		{Name: "/skills", Kind: CmdView},
 		{Name: "/agents", Kind: CmdView},
 		{Name: "/sessions", Kind: CmdView},
+		{Name: "/context", Kind: CmdView},
 		{Name: "/settings", Kind: CmdView},
 		{
 			Name:   "/about",
@@ -167,6 +168,10 @@ func MainMenu(props tuix.Props) tuix.Element {
 		},
 	)
 
+	contextView := view.Context(tuix.Props{Values: map[string]any{
+		"runtime": context.Runtime,
+	}})
+
 	if activeView == "/models" {
 		return modelSelection
 	}
@@ -189,6 +194,10 @@ func MainMenu(props tuix.Props) tuix.Element {
 
 	if activeView == "/providers" {
 		return providersView
+	}
+
+	if activeView == "/context" {
+		return contextView
 	}
 
 	commandNames := utils.Map(

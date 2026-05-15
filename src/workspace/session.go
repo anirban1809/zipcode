@@ -12,6 +12,7 @@ import (
 	"time"
 
 	llm "zipcode/src/llm/provider"
+	"zipcode/src/secrets"
 )
 
 const sessionsDir = ".zipcode/sessions"
@@ -84,7 +85,8 @@ func (s *Session) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.Path, data, 0o644)
+	redactedData := secrets.RedactForDisplay(string(data))
+	return os.WriteFile(s.Path, []byte(redactedData), 0o644)
 }
 
 func ListSessions(workspaceRoot string) ([]*Session, error) {

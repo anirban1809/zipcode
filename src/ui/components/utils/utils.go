@@ -6,3 +6,9 @@ import "github.com/anirban1809/tuix/tuix"
 func NewLine() tuix.Element {
 	return tuix.Text("", tuix.NewStyle())
 }
+
+func Empty() tuix.Element {
+	return tuix.Box(
+		tuix.Props{}, tuix.NewStyle(),
+	)
+}

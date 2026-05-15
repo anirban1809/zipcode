@@ -6,3 +6,6 @@ logs.txt
 
 .zipcode
 features
+
+.zipcode/sessions
+.vscode

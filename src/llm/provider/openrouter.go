@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	"time"
+
 	"zipcode/src/config"
+	"zipcode/src/llm/errors"
 	"zipcode/src/tools"
 	"zipcode/src/utils"
 
@@ -18,6 +20,7 @@ type OpenRouterProvider struct {
 	ProviderId string
 	Model      string
 	Tools      []tools.Tool
+	ApiKey     string
 }
 
 func NewOpenRouterProvider() *OpenRouterProvider {
@@ -43,13 +46,6 @@ type OpenRouterRequest struct {
 	ToolChoice          interface{}            `json:"tool_choice,omitempty"`
 	Tools               []tools.Tool           `json:"tools,omitempty"`
 	Extra               map[string]interface{} `json:"extra,omitempty"` // forward compatibility
-}
-
-type ChatMessage struct {
-	Role       string      `json:"role"`    // system | user | assistant | tool
-	Content    interface{} `json:"content"` // string OR []ContentPart
-	Name       string      `json:"name,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
 }
 
 type ContentPart struct {
@@ -92,7 +88,10 @@ type OpenRouterResponse struct {
 	Created           int       `json:"created"`
 	Choices           []Choices `json:"choices"`
 	SystemFingerprint string    `json:"system_fingerprint"`
-	Usage             Usage     `json:"usage"`
+	Usage             struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
 }
 type ReasoningDetails struct {
 	Format any    `json:"format"`
@@ -101,20 +100,16 @@ type ReasoningDetails struct {
 	Text   string `json:"text"`
 }
 
-type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls"`
-	ToolCallId string     `json:"tool_call_id,omitempty"`
-}
-
 type Choices struct {
-	Logprobs           any          `json:"logprobs"`
-	FinishReason       string       `json:"finish_reason"`
-	NativeFinishReason string       `json:"native_finish_reason"`
-	Index              int          `json:"index"`
-	Message            Message      `json:"message"`
-	Delta              MessageDelta `json:"delta"`
+	FinishReason       string `json:"finish_reason"`
+	NativeFinishReason string `json:"native_finish_reason"`
+	Index              int    `json:"index"`
+	Message            struct {
+		Content   string     `json:"content"`
+		Role      string     `json:"role"`
+		ToolCalls []ToolCall `json:"tool_calls"`
+	} `json:"message"`
+	Delta MessageDelta `json:"delta"`
 }
 
 type MessageDelta struct {
@@ -122,18 +117,6 @@ type MessageDelta struct {
 	Role      string     `json:"role"`
 	Reasoning string     `json:"reasoning"`
 	ToolCalls []ToolCall `json:"tool_calls"`
-}
-
-type ToolCall struct {
-	Type     string           `json:"type"`
-	Index    int              `json:"index"`
-	ID       string           `json:"id"`
-	Function ToolCallFunction `json:"function"`
-}
-
-type ToolCallFunction struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
 }
 
 type PromptTokensDetails struct {
@@ -149,16 +132,6 @@ type CompletionTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens"`
 	AudioTokens     int `json:"audio_tokens"`
 }
-type Usage struct {
-	PromptTokens            int                     `json:"prompt_tokens"`
-	CompletionTokens        int                     `json:"completion_tokens"`
-	TotalTokens             int                     `json:"total_tokens"`
-	Cost                    float64                 `json:"cost"`
-	IsByok                  bool                    `json:"is_byok"`
-	PromptTokensDetails     PromptTokensDetails     `json:"prompt_tokens_details"`
-	CostDetails             CostDetails             `json:"cost_details"`
-	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details"`
-}
 
 func (p *OpenRouterProvider) SetModel(model string, nitro bool) {
 	if nitro {
@@ -168,32 +141,86 @@ func (p *OpenRouterProvider) SetModel(model string, nitro bool) {
 	p.Model = model
 }
 
-type Conversation struct {
-	Tools            []tools.Tool
-	Messages         []Message
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
-}
-
-func (r *OpenRouterProvider) Chat(prev *Conversation) (*Conversation, error) {
-	r.SetModel(config.CurrentModel, true)
-	value, err := r.Complete(prev)
-
+func (p *OpenRouterProvider) AuthCheck(key string) AuthResult {
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(
+		http.MethodGet,
+		"https://openrouter.ai/api/v1/key",
+		nil,
+	)
 	if err != nil {
-		return nil, err
+		return AuthResult{Status: 0, ErrorMessage: err.Error()}
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", key))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return AuthResult{Status: 0, ErrorMessage: err.Error()}
+	}
+	defer resp.Body.Close()
+
+	result := AuthResult{Status: resp.StatusCode}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		result.ErrorMessage = string(body)
+	} else {
+		p.ApiKey = key
 	}
 
-	prev.Messages = append(prev.Messages, value.Choices[0].Message)
-	prev.CompletionTokens = value.Usage.CompletionTokens
-	prev.PromptTokens = value.Usage.PromptTokens
-	prev.TotalTokens = value.Usage.TotalTokens
-
-	return prev, nil
+	return result
 }
 
-func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterResponse, error) {
+func (p OpenRouterProvider) IsQuotaError(
+	resp *http.Response,
+	body []byte,
+) bool {
+	// OpenRouter uses 402 Payment Required for insufficient credits; 429 is rate-limit only.
+	return resp.StatusCode == http.StatusPaymentRequired
+}
 
+func (p OpenRouterProvider) Models() []ModelDescriptor {
+	ids := []string{
+		"openai/gpt-5.2",
+		"openai/gpt-5.5",
+		"minimax/minimax-m2.5",
+		"minimax/minimax-m2.7",
+		"anthropic/claude-sonnet-4.6",
+		"anthropic/claude-haiku-4.5",
+		"openai/gpt-5.1-codex-mini",
+		"moonshotai/kimi-k2.5",
+		"meta-llama/llama-3.3-70b-instruct",
+		"z-ai/glm-4.7",
+		"qwen/qwen3-coder-flash",
+		"openai/gpt-5-nano",
+		"z-ai/glm-5",
+		"openai/gpt-5.4-nano",
+		"deepseek/deepseek-v3.2",
+		"openai/gpt-5.4",
+		"openai/gpt-5.3-codex",
+		"z-ai/glm-5v-turbo",
+	}
+	descriptors := make([]ModelDescriptor, len(ids))
+	for i, id := range ids {
+		descriptors[i] = ModelDescriptor{
+			ID:           id,
+			DisplayName:  id,
+			ProviderName: string(OpenRouterAPIProvider),
+		}
+	}
+	return descriptors
+}
+
+func (p OpenRouterProvider) Name() ProviderName {
+	return OpenRouterAPIProvider
+}
+
+func (p *OpenRouterProvider) SetApiKey(key string) {
+	p.ApiKey = key
+}
+
+func (p *OpenRouterProvider) Complete(
+	request ChatRequest,
+) (ChatResponse, error) {
 	godotenv.Load()
 
 	retry := true
@@ -201,46 +228,51 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 
 	for retry {
 		requestBody := OpenRouterRequest{
-			Model:               p.Model,
-			Messages:            conversation.Messages,
+			Model:               config.Cfg.CurrentModel,
+			Messages:            request.Messages,
 			Stream:              false,
-			Tools:               conversation.Tools,
+			Tools:               request.Tools,
 			MaxTokens:           8192,
 			MaxCompletionTokens: 2048,
 		}
 
 		value, err := json.Marshal(requestBody)
-
-		//debug code
-		utils.LogValue(conversation.Messages[len(conversation.Messages)-1])
-		//debug code
-
-		req, err := http.NewRequest(http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(value))
-
 		if err != nil {
-			return OpenRouterResponse{}, err
+			return ChatResponse{}, err
 		}
 
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("OPENROUTER_API_KEY")))
-		client := &http.Client{}
+		// debug code
+		utils.LogValue(request.Messages[len(request.Messages)-1])
+		// debug code
 
-		res, err := client.Do(req)
+		res, err := errors.RetryWithBackoff(p, func() (*http.Response, error) {
+			req, err := http.NewRequest(
+				http.MethodPost,
+				"https://openrouter.ai/api/v1/chat/completions",
+				bytes.NewReader(value),
+			)
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(
+				"Authorization",
+				fmt.Sprintf("Bearer %s", p.ApiKey),
+			)
+			return http.DefaultClient.Do(req)
+		})
 		if err != nil {
-			return OpenRouterResponse{}, err
+			return ChatResponse{}, err
 		}
 
-		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
-
+		res.Body.Close()
 		if err != nil {
-			return OpenRouterResponse{}, err
+			return ChatResponse{}, err
 		}
 
-		err = json.Unmarshal(body, &finalResponse)
-
-		if err != nil {
-			return OpenRouterResponse{}, err
+		if err := json.Unmarshal(body, &finalResponse); err != nil {
+			return ChatResponse{}, err
 		}
 
 		if len(finalResponse.Choices) > 0 {
@@ -250,5 +282,14 @@ func (p *OpenRouterProvider) Complete(conversation *Conversation) (OpenRouterRes
 		}
 	}
 
-	return finalResponse, nil
+	var chatResponse ChatResponse
+	chatResponse.Model = finalResponse.Model
+	chatResponse.ID = finalResponse.ID
+	chatResponse.Usage.InputTokens = finalResponse.Usage.PromptTokens
+	chatResponse.Usage.OutputTokens = finalResponse.Usage.CompletionTokens
+	chatResponse.Message.Role = finalResponse.Choices[0].Message.Role
+	chatResponse.Message.Content = finalResponse.Choices[0].Message.Content
+	chatResponse.Message.ToolCalls = finalResponse.Choices[0].Message.ToolCalls
+
+	return chatResponse, nil
 }

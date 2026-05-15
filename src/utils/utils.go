@@ -8,15 +8,55 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 	"zipcode/src/config"
 	"zipcode/src/tools"
 
 	"golang.org/x/term"
 )
 
+func HumanTime(str string) string {
+	t, err := time.Parse(time.RFC3339, str)
+
+	if err != nil {
+		return ""
+	}
+
+	if t.IsZero() {
+		return ""
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "less than a minute ago"
+	case d < time.Hour:
+		mins := int(d / time.Minute)
+		if mins == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", mins)
+	case d < 24*time.Hour:
+		hrs := int(d / time.Hour)
+		if hrs == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hrs)
+	default:
+		return t.Format("at 3:04PM on 01/02/2006")
+	}
+}
+
 func PrintStruct(value any) {
 	result, _ := json.Marshal(value)
 	fmt.Println(string(result) + "\n")
+}
+
+func If[T any](condition bool, thenValue T, elseValue T) T {
+	if condition {
+		return thenValue
+	} else {
+		return elseValue
+	}
 }
 
 func isStruct(v any) bool {
@@ -52,7 +92,7 @@ func FlexGap(totalWidth int, subWidth int) string {
 }
 
 func LogValue(value any) {
-	if !config.HEADLESS {
+	if !config.Cfg.Headless {
 		return
 	}
 
@@ -66,7 +106,7 @@ func LogValue(value any) {
 }
 
 func Log(a ...any) {
-	if config.HEADLESS {
+	if config.Cfg.Headless {
 		fmt.Println(a...)
 	} else {
 		f, err := os.OpenFile("./logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

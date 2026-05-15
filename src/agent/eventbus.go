@@ -1,11 +1,14 @@
 package agent
 
+import "zipcode/src/secrets"
+
 type EventsManager struct {
 	agentOutput   chan ResponseEvent
 	agentInput    chan string
 	fileChange    chan FileChangeEvent
 	subagentInput chan string
-	notification  chan string
+	notification  chan Notification
+	err           chan string
 }
 
 type ChannelType int
@@ -16,12 +19,28 @@ const (
 	FILE_DIFF_CHANNEL
 	SUBAGENT_CHANNEL
 	NOTIFICATION_CHANNEL
+	AGENT_ERROR_CHANNEL
 )
+
+type NotificationType int
+
+const (
+	INFO NotificationType = iota
+	ERROR
+	DEBUG
+)
+
+type Notification struct {
+	Type    NotificationType
+	Message string
+}
 
 func (e *EventsManager) WriteToChannel(channelType ChannelType, data any) {
 	switch channelType {
 	case AGENT_OUTPUT_CHANNEL:
-		e.agentOutput <- data.(ResponseEvent)
+		event := data.(ResponseEvent)
+		event.Message = secrets.RedactForDisplay(event.Message)
+		e.agentOutput <- event
 		return
 
 	case AGENT_INPUT_CHANNEL:
@@ -37,7 +56,7 @@ func (e *EventsManager) WriteToChannel(channelType ChannelType, data any) {
 		return
 
 	case NOTIFICATION_CHANNEL:
-		e.notification <- data.(string)
+		e.notification <- data.(Notification)
 		return
 	}
 }
@@ -71,6 +90,6 @@ func CreateEventManager() EventsManager {
 		agentInput:    make(chan string),
 		fileChange:    make(chan FileChangeEvent),
 		subagentInput: make(chan string),
-		notification:  make(chan string),
+		notification:  make(chan Notification),
 	}
 }

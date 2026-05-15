@@ -1,84 +1,167 @@
 package config
 
-var HEADLESS = false
-var APP_VERSION = "0.0.1"
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 
-type OpenRouterModel string
-
-const (
-	GPT_5_2                OpenRouterModel = "openai/gpt-5.2"
-	MINIMAX_M2_5           OpenRouterModel = "minimax/minimax-m2.5"
-	MINIMAX_M2_7           OpenRouterModel = "minimax/minimax-m2.7"
-	CLAUDE_SONNET_4_6      OpenRouterModel = "anthropic/claude-sonnet-4.6"
-	CLAUDE_HAIKU_4_5       OpenRouterModel = "anthropic/claude-haiku-4.5"
-	GPT_5_1_CODEX_MINI     OpenRouterModel = "openai/gpt-5.1-codex-mini"
-	KIMI_K_2_5             OpenRouterModel = "moonshotai/kimi-k2.5"
-	LLAMA_3_3_70B_INSTRUCT OpenRouterModel = "meta-llama/llama-3.3-70b-instruct"
-	GLM_4_7                OpenRouterModel = "z-ai/glm-4.7"
-	QWEN_3_CODER_FLASH     OpenRouterModel = "qwen/qwen3-coder-flash"
-	GPT_5_NANO             OpenRouterModel = "openai/gpt-5-nano"
-	GLM_5                  OpenRouterModel = "z-ai/glm-5"
-	GPT_5_4_NANO           OpenRouterModel = "openai/gpt-5.4-nano"
-	DEEPSEEK_3_2           OpenRouterModel = "deepseek/deepseek-v3.2"
-	GPT_5_4                OpenRouterModel = "openai/gpt-5.4"
-	GPT_5_3_CODEX          OpenRouterModel = "openai/gpt-5.3-codex"
-	GLM_5_V_TURBO          OpenRouterModel = "z-ai/glm-5v-turbo"
+	"github.com/BurntSushi/toml"
 )
 
-var ModelNames = []string{
-	"openai/gpt-5.2",
-	"openai/gpt-5.5",
-	"minimax/minimax-m2.5",
-	"minimax/minimax-m2.7",
-	"anthropic/claude-sonnet-4.6",
-	"anthropic/claude-haiku-4.5",
-	"openai/gpt-5.1-codex-mini",
-	"moonshotai/kimi-k2.5",
-	"meta-llama/llama-3.3-70b-instruct",
-	"z-ai/glm-4.7",
-	"qwen/qwen3-coder-flash",
-	"openai/gpt-5-nano",
-	"z-ai/glm-5",
-	"openai/gpt-5.4-nano",
-	"deepseek/deepseek-v3.2",
-	"openai/gpt-5.4",
-	"openai/gpt-5.3-codex",
-	"z-ai/glm-5v-turbo",
+type Config struct {
+	Headless              bool     `toml:"headless"`
+	AppVersion            string   `toml:"app_version"`
+	ModelNames            []string `toml:"model_names"`
+	CurrentModel          string   `toml:"current_model"`
+	InternalToolPath      string   `toml:"internal_tool_path"`
+	ExternalToolPath      string   `toml:"external_tool_path"`
+	InternalSubagentsPath string   `toml:"internal_subagents_path"`
+	ExternalSubagentsPath string   `toml:"external_subagents_path"`
+	InternalSkillsPath    string   `toml:"internal_skills_path"`
+	GlobalSkillsPath      string   `toml:"global_skills_path"`
+	ProjectSkillsPath     string   `toml:"project_skills_path"`
+	SkillsStatePath       string   `toml:"skills_state_path"`
+	HomeDir               string   `toml:"home_dir"`
+	CredentialsPath       string   `toml:"credentials_path"`
+	ConfigPath            string   `toml:"config_path"`
+	ActiveProviderName    string   `toml:"active_provider_name"`
+	ProviderModels        map[string]string `toml:"provider_models"`
 }
 
-var ModelDescriptions = []string{
-	"General-purpose GPT-5.2 model suitable for complex reasoning, coding, and multi-step tasks.",
-	"Minimax M2.5 model optimized for fast inference and cost-efficient general tasks.",
-	"Improved Minimax M2.7 model with better reasoning and language capabilities over M2.5.",
-	"Claude Sonnet 4.6 model optimized for high-quality reasoning, coding, and structured outputs.",
-	"Claude Haiku 4.5 model designed for fast, low-cost responses with good general performance.",
-	"Lightweight GPT-5.1 Codex variant optimized for code generation and quick developer workflows.",
-	"Kimi K2.5 model focused on long-context understanding and conversational reasoning.",
-	"LLaMA 3.3 70B instruct-tuned model for general-purpose reasoning and instruction following.",
-	"GLM 4.7 model offering balanced performance for multilingual and general AI tasks.",
-	"Qwen3 Coder Flash model optimized for fast and efficient code generation tasks.",
-	"Ultra-lightweight GPT-5 Nano model designed for very fast and low-cost inference.",
-	"GLM-5 model with enhanced reasoning, multimodal capabilities, and improved accuracy.",
-	"Improved nano-tier GPT-5.4 model with better efficiency and slightly enhanced reasoning.",
-	"DeepSeek v3.2 model optimized for coding, reasoning, and cost-efficient inference.",
-	"Latest GPT-5.4 model offering top-tier reasoning, coding, and multimodal capabilities.",
-	"GPT-5.3 Codex model specialized for advanced code generation and developer workflows.",
-	"GLM-5V Turbo model optimized for fast multimodal tasks including vision and text processing.",
+var Cfg = &Config{}
+
+func defaults() *Config {
+	return &Config{
+		Headless:   false,
+		AppVersion: "0.0.1",
+		ModelNames: []string{
+			"openai/gpt-5.2",
+			"openai/gpt-5.5",
+			"minimax/minimax-m2.5",
+			"minimax/minimax-m2.7",
+			"anthropic/claude-sonnet-4.6",
+			"anthropic/claude-haiku-4.5",
+			"openai/gpt-5.1-codex-mini",
+			"moonshotai/kimi-k2.5",
+			"meta-llama/llama-3.3-70b-instruct",
+			"z-ai/glm-4.7",
+			"qwen/qwen3-coder-flash",
+			"openai/gpt-5-nano",
+			"z-ai/glm-5",
+			"openai/gpt-5.4-nano",
+			"deepseek/deepseek-v3.2",
+			"openai/gpt-5.4",
+			"openai/gpt-5.3-codex",
+			"z-ai/glm-5v-turbo",
+		},
+		CurrentModel:          "minimax/minimax-m2.5",
+		InternalToolPath:      "/Users/anirban/Documents/Code/zipcode/src/tools",
+		ExternalToolPath:      "~/.zipcode/tools",
+		InternalSubagentsPath: "/Users/anirban/Documents/Code/zipcode/src/subagents",
+		ExternalSubagentsPath: "~/.zipcode/tools",
+		InternalSkillsPath:    "/Users/anirban/Documents/Code/zipcode/src/skills/builtin",
+		GlobalSkillsPath:      "~/.zipcode/skills",
+		ProjectSkillsPath:     ".zipcode/skills",
+		SkillsStatePath:       "~/.zipcode/skills.state.json",
+		HomeDir:               "~/.zipcode",
+		CredentialsPath:       "~/.zipcode/credentials.toml",
+		ConfigPath:            "~/.zipcode/config.toml",
+		ProviderModels:        map[string]string{},
+	}
 }
 
-func SetCurrentModel(model string) {
-	CurrentModel = model
+func zipcodeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".zipcode"), nil
 }
 
-var CurrentModel = "minimax/minimax-m2.5"
+func Load() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(home, ".zipcode")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 
-var INTERNAL_TOOL_PATH = "/Users/anirban/Documents/Code/zipcode/src/tools"
-var EXTERNAL_TOOL_PATH = "~/.zipcode/tools"
+	defaultsPath := filepath.Join(dir, "defaults.toml")
+	configPath := filepath.Join(dir, "config.toml")
 
-var INTERNAL_SUBAGENTS_PATH = "/Users/anirban/Documents/Code/zipcode/src/subagents"
-var EXTERNAL_SUBAGENTS_PATH = "~/.zipcode/tools"
+	*Cfg = *defaults()
 
-var INTERNAL_SKILLS_PATH = "/Users/anirban/Documents/Code/zipcode/src/skills/builtin"
-var GLOBAL_SKILLS_PATH = "~/.zipcode/skills"
-var PROJECT_SKILLS_PATH = ".zipcode/skills"
-var SKILLS_STATE_PATH = "~/.zipcode/skills.state.json"
+	if _, err := os.Stat(defaultsPath); errors.Is(err, os.ErrNotExist) {
+		if err := writeTOML(defaultsPath, Cfg); err != nil {
+			return err
+		}
+	} else if err == nil {
+		if _, err := toml.DecodeFile(defaultsPath, Cfg); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+
+	if _, err := os.Stat(configPath); err == nil {
+		if _, err := toml.DecodeFile(configPath, Cfg); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	Cfg.expandPaths(home)
+	return nil
+}
+
+func (c *Config) Save() error {
+	dir, err := zipcodeDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+
+		return err
+	}
+	return writeTOML(filepath.Join(dir, "config.toml"), c)
+}
+
+func (c *Config) SetCurrentModel(model string) {
+	c.CurrentModel = model
+}
+
+func (c *Config) expandPaths(home string) {
+	c.InternalToolPath = expand(c.InternalToolPath, home)
+	c.ExternalToolPath = expand(c.ExternalToolPath, home)
+	c.InternalSubagentsPath = expand(c.InternalSubagentsPath, home)
+	c.ExternalSubagentsPath = expand(c.ExternalSubagentsPath, home)
+	c.InternalSkillsPath = expand(c.InternalSkillsPath, home)
+	c.GlobalSkillsPath = expand(c.GlobalSkillsPath, home)
+	c.SkillsStatePath = expand(c.SkillsStatePath, home)
+	c.HomeDir = expand(c.HomeDir, home)
+	c.CredentialsPath = expand(c.CredentialsPath, home)
+	c.ConfigPath = expand(c.ConfigPath, home)
+}
+
+func expand(p, home string) string {
+	if p == "~" {
+		return home
+	}
+	if strings.HasPrefix(p, "~/") {
+		return filepath.Join(home, p[2:])
+	}
+	return p
+}
+
+func writeTOML(path string, v any) error {
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(v); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0644)
+}

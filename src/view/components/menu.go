@@ -6,7 +6,11 @@ import (
 	"github.com/anirban1809/tuix/tuix"
 )
 
-func Menu(props tuix.Props, onChange func(index string)) tuix.Element {
+func Menu(
+	props tuix.Props,
+	onChange func(selectedItem string, index int),
+	onFocusChange func(index int),
+) tuix.Element {
 	focussedIndex, setFocussedIndex := tuix.UseState(0)
 	items := props.Get("items").([]string)
 
@@ -24,19 +28,26 @@ func Menu(props tuix.Props, onChange func(index string)) tuix.Element {
 	if visible {
 
 		if tuix.CurrentKey.Code == tuix.KeyEnter && onChange != nil {
-			onChange(items[focussedIndex])
+			onChange(items[focussedIndex], focussedIndex)
 		}
 
 		if tuix.CurrentKey.Code == tuix.KeyUp && focussedIndex > 0 {
 			next := focussedIndex - 1
 			setFocussedIndex(next)
+			if onFocusChange != nil {
+				onFocusChange(next)
+			}
 			if next < viewFloor {
 				setViewFloor(viewFloor - 1)
 			}
 		}
-		if tuix.CurrentKey.Code == tuix.KeyDown && focussedIndex < len(items)-1 {
+		if tuix.CurrentKey.Code == tuix.KeyDown &&
+			focussedIndex < len(items)-1 {
 			next := focussedIndex + 1
 			setFocussedIndex(next)
+			if onFocusChange != nil {
+				onFocusChange(next)
+			}
 			if next >= viewFloor+viewSize {
 				setViewFloor(viewFloor + 1)
 			}
@@ -47,22 +58,27 @@ func Menu(props tuix.Props, onChange func(index string)) tuix.Element {
 		return tuix.Box(tuix.Props{}, tuix.NewStyle())
 	}
 
-	menuItems := utils.Map(items[viewFloor:viewCeil], func(item string, index int) tuix.Element {
-		style := tuix.NewStyle().Foreground(tuix.Hex("#cbcbcb"))
-		absIndex := viewFloor + index
+	menuItems := utils.Map(
+		items[viewFloor:viewCeil],
+		func(item string, index int) tuix.Element {
+			style := tuix.NewStyle().Foreground(tuix.Hex("#cbcbcb"))
+			absIndex := viewFloor + index
 
-		if absIndex == focussedIndex {
-			style = style.Foreground(tuix.Hex("#019176"))
-		}
+			if absIndex == focussedIndex {
+				style = style.Foreground(tuix.Hex("#019176"))
+			}
 
-		return tuix.Box(tuix.Props{Direction: tuix.Row, Gap: 1}, tuix.NewStyle(),
-			tuix.Text(item, style))
-	})
+			return tuix.Box(
+				tuix.Props{Direction: tuix.Row, Gap: 1},
+				tuix.NewStyle(),
+				tuix.Text(item, style),
+			)
+		},
+	)
 
 	return tuix.Box(
 		tuix.Props{Direction: tuix.Column, Padding: [4]int{0, 1, 1, 1}},
 		tuix.NewStyle(),
 		menuItems...,
 	)
-
 }

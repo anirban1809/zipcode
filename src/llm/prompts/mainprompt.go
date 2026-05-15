@@ -36,7 +36,7 @@ func BuildSystemPrompt(skills []SkillSummary) string {
 		if desc == "" {
 			desc = "(no description)"
 		}
-		sb.WriteString(fmt.Sprintf("- /%s — %s\n", s.Name, desc))
+		fmt.Fprintf(&sb, "- /%s — %s\n", s.Name, desc)
 	}
 	return sb.String()
 }

@@ -37,29 +37,70 @@ func StatusLine(props tuix.Props) tuix.Element {
 
 	branchStyle := tuix.NewStyle()
 	if hasUncommittedChanges {
-		branchStyle = branchStyle.Foreground(tuix.Hex("#0097d7")) // Yellow/orange for uncommitted changes
+		branchStyle = branchStyle.Foreground(
+			tuix.Hex("#0097d7"),
+		) // Yellow/orange for uncommitted changes
 	} else {
 		branchStyle = branchStyle.Foreground(tuix.Hex("#00c732"))
 	}
 
-	return tuix.Box(
-		tuix.Props{Direction: tuix.Row, Padding: [4]int{0, 1, 1, 1}, Justify: tuix.JustifySpaceBetween},
-		tuix.NewStyle().Foreground(tuix.Hex("#a2a2a2")),
+	var providerName string
+	var modelName string
+
+	if config.Cfg.ActiveProviderName == "" {
+		providerName = "Unconfigured"
+		modelName = "Unconfigured"
+	} else {
+		providerName = string(config.Cfg.ActiveProviderName)
+		modelName = config.Cfg.CurrentModel
+	}
+
+	line1 := tuix.Box(
+		tuix.Props{Direction: tuix.Row, Justify: tuix.JustifySpaceBetween},
+		tuix.NewStyle(),
 		tuix.Text(
 			fmt.Sprintf("%s | %s (%s)", status, workspacePath, branch),
 			branchStyle,
 		),
-		tuix.Box(
-			tuix.Props{Direction: tuix.Row, Gap: 2},
+		tuix.Text(
+			fmt.Sprintf(
+				"Tokens:  %d\u2191 / %d\u2193 (%d)",
+				inputTokens,
+				outputTokens,
+				totalTokens,
+			),
 			tuix.NewStyle(),
-			tuix.Text(
-				fmt.Sprintf("Model: %s", config.CurrentModel),
-				tuix.NewStyle(),
+		),
+	)
+
+	line2 := tuix.Box(
+		tuix.Props{Direction: tuix.Row, Justify: tuix.JustifySpaceBetween},
+		tuix.NewStyle(),
+		tuix.Text(
+			fmt.Sprintf(
+				"Provider: %s . Model: %s",
+				providerName,
+				modelName,
 			),
-			tuix.Text(
-				fmt.Sprintf("Tokens:  %d\u2191 / %d\u2193 (%d), Context: %0.2f%%", inputTokens, outputTokens, totalTokens, float64(totalTokens*100)/200000),
-				tuix.NewStyle(),
-			),
+			tuix.NewStyle(),
+		),
+		tuix.Text(
+			fmt.Sprintf("Context: %0.2f%%", float32((totalTokens*100)/200000)),
+			tuix.NewStyle(),
+		),
+	)
+
+	return tuix.Box(
+		tuix.Props{
+			Direction: tuix.Column,
+			Padding:   [4]int{1, 1, 1, 1},
+			Justify:   tuix.JustifySpaceBetween,
+		},
+		tuix.NewStyle().Foreground(tuix.Hex("#a2a2a2")),
+		tuix.Box(
+			tuix.Props{Direction: tuix.Column},
+			tuix.NewStyle(),
+			line1, line2,
 		),
 	)
 }

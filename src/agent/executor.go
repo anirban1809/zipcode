@@ -8,6 +8,7 @@ import (
 	"strings"
 	"zipcode/src/config"
 	llm "zipcode/src/llm/provider"
+	"zipcode/src/secrets"
 	"zipcode/src/tools"
 	"zipcode/src/utils"
 
@@ -18,6 +19,7 @@ type ResponseEventType int
 
 const (
 	Tool ResponseEventType = iota
+	Error
 	Message
 )
 
@@ -135,7 +137,7 @@ func (e *Executor) SetActiveSkill(name string) {
 }
 
 func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, ExecutionResultStatus, error) {
-	if config.HEADLESS {
+	if config.Cfg.Headless {
 		utils.PrintStruct(response)
 	}
 
@@ -183,13 +185,13 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, Exe
 }
 
 func (e *Executor) pushEvent(eventType ResponseEventType, value string) {
-	if config.HEADLESS {
+	if config.Cfg.Headless {
 		return
 	}
 
 	EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
 		EventType:    eventType,
-		Message:      value,
+		Message:      secrets.RedactForDisplay(value),
 		SubAgent:     e.SubAgentRunning,
 		SubAgentName: e.SubAgent,
 		SkillName:    e.ActiveSkill,
@@ -215,17 +217,17 @@ func GetTool(path string, toolname string) (tools.Tool, error) {
 }
 
 func (e *Executor) GetToolCallCommand(input ToolCallResponseData) (string, error) {
-	internaltool, err1 := GetTool(config.INTERNAL_TOOL_PATH, input.Name)
-	externaltool, err2 := GetTool(config.EXTERNAL_TOOL_PATH, input.Name)
+	internaltool, err1 := GetTool(config.Cfg.InternalToolPath, input.Name)
+	externaltool, err2 := GetTool(config.Cfg.ExternalToolPath, input.Name)
 	var toolPath string
 	var tool tools.Tool
 
 	if err1 != nil {
 		tool = externaltool
-		toolPath = config.EXTERNAL_TOOL_PATH
+		toolPath = config.Cfg.ExternalToolPath
 	} else if err2 != nil {
 		tool = internaltool
-		toolPath = config.INTERNAL_TOOL_PATH
+		toolPath = config.Cfg.InternalToolPath
 	}
 
 	if err1 != nil && err2 != nil {
@@ -319,7 +321,7 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 
 		}
 
-		if !config.HEADLESS {
+		if !config.Cfg.Headless {
 			EventManager.WriteToChannel(FILE_DIFF_CHANNEL, FileChangeEvent{
 				FileName:   fileWriteInput.FilePath,
 				ChangeType: changeType,

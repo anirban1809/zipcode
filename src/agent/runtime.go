@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
 	"zipcode/src/config"
+	"zipcode/src/credentials"
 	"zipcode/src/llm/prompts"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/skills"
@@ -26,33 +28,36 @@ const (
 type RuntimeEvent string
 
 type Runtime struct {
-	Prompt        string
-	Executor      *Executor
-	Status        RuntimeStatus
-	LLM           *llm.OpenRouterProvider
-	Workspace     *workspace.Workspace
-	Tools         []tools.Tool
-	InputTokens   int
-	OutputTokens  int
-	Conversation  llm.Conversation
-	Agent         Agent
-	Session       string
-	ChildRuntime  bool
-	SkillRegistry *skills.SkillRegistry
-	SkillWatcher  *skills.Watcher
+	Prompt          string
+	Executor        *Executor
+	Status          RuntimeStatus
+	Registry        llm.Registry
+	CurrentProvider llm.Provider
+	Workspace       *workspace.Workspace
+	Tools           []tools.Tool
+	InputTokens     int
+	OutputTokens    int
+	Conversation    llm.Conversation
+	Agent           Agent
+	Session         string
+	ChildRuntime    bool
+	SkillRegistry   *skills.SkillRegistry
+	SkillWatcher    *skills.Watcher
+	CredStore       *credentials.Store
+	Validator       credentials.Validator
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
 	registry, watcher, _ := skills.Init(
-		config.INTERNAL_SKILLS_PATH,
-		config.GLOBAL_SKILLS_PATH,
-		config.PROJECT_SKILLS_PATH,
-		config.SKILLS_STATE_PATH,
+		config.Cfg.InternalSkillsPath,
+		config.Cfg.GlobalSkillsPath,
+		config.Cfg.ProjectSkillsPath,
+		config.Cfg.SkillsStatePath,
 	)
 
 	runtime := Runtime{
 		Status:    Idle,
-		LLM:       llm.NewOpenRouterProvider(),
+		Registry:  llm.NewRegistry(),
 		Workspace: workspace,
 		Executor: NewExecutor(prompts.MainSystemPrompt,
 			[]tools.Tool{
@@ -63,14 +68,69 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 		),
 		SkillRegistry: registry,
 		SkillWatcher:  watcher,
+		CredStore:     credentials.NewStore(),
 	}
+
+	err := runtime.CredStore.Load()
+
+	if err != nil {
+		go EventManager.WriteToChannel(
+			NOTIFICATION_CHANNEL,
+			Notification{
+				Type: ERROR,
+				Message: fmt.Sprintf(
+					"Failed to load credentials. Error: %s",
+					err.Error(),
+				),
+			},
+		)
+	}
+
+	runtime.Validator = *credentials.NewValidator(runtime.Registry.Providers, runtime.CredStore)
+
+	for name, prov := range runtime.Registry.Providers {
+		if creds, ok := runtime.CredStore.Get(name); ok {
+			prov.SetApiKey(creds.APIKey)
+		}
+	}
+
+	if config.Cfg.ActiveProviderName != "" {
+		active := runtime.Registry.GetProvider(
+			llm.ProviderName(config.Cfg.ActiveProviderName),
+		)
+		runtime.CurrentProvider = active
+		if saved, ok := config.Cfg.ProviderModels[config.Cfg.ActiveProviderName]; ok && saved != "" {
+			config.Cfg.CurrentModel = saved
+		} else if active != nil {
+			if models := active.Models(); len(models) > 0 {
+				config.Cfg.CurrentModel = models[0].ID
+				if config.Cfg.ProviderModels == nil {
+					config.Cfg.ProviderModels = map[string]string{}
+				}
+				config.Cfg.ProviderModels[config.Cfg.ActiveProviderName] = models[0].ID
+				config.Cfg.Save()
+			}
+		}
+	}
+
 	if workspace != nil && workspace.Session != nil {
 		runtime.Session = workspace.Session.ID
 	}
-	runtime.Agent = NewAgent(prompts.MainSystemPrompt, &runtime.Tools, llm.NewOpenRouterProvider())
-	runtime.Tools = append(runtime.Tools, tools.FileWriteTool, tools.InvokeSkillTool)
-	runtime.loadTools(config.INTERNAL_TOOL_PATH)
-	runtime.loadTools(config.EXTERNAL_TOOL_PATH)
+
+	runtime.Agent = NewAgent(
+		prompts.MainSystemPrompt,
+		&runtime.Tools,
+		&runtime.Registry,
+		&runtime.Validator,
+	)
+	runtime.Tools = append(
+		runtime.Tools,
+		tools.FileWriteTool,
+		tools.InvokeSkillTool,
+	)
+	runtime.loadTools(config.Cfg.InternalToolPath)
+	runtime.loadTools(config.Cfg.ExternalToolPath)
+
 	return runtime
 }
 
@@ -80,10 +140,6 @@ func (r Runtime) GetExecutorEventChannel() chan ResponseEvent {
 
 func (r Runtime) GetExecutorMessageChannel() chan string {
 	return r.Executor.MessageChannel
-}
-
-func (r *Runtime) SetModel(model string) {
-	r.LLM.SetModel(model, false)
 }
 
 func (r *Runtime) SetSession(session *workspace.Session) {
@@ -125,8 +181,7 @@ func GetToolsforSubAgent(toolNames []string) ([]tools.Tool, error) {
 	allowedTools := []tools.Tool{}
 
 	for _, toolName := range toolNames {
-		toolManifest, err := GetTool(config.INTERNAL_TOOL_PATH, toolName)
-
+		toolManifest, err := GetTool(config.Cfg.InternalToolPath, toolName)
 		if err != nil {
 			return nil, err
 		}
@@ -137,47 +192,58 @@ func GetToolsforSubAgent(toolNames []string) ([]tools.Tool, error) {
 	return allowedTools, nil
 }
 
-func (r *Runtime) NewChildRuntime(agentName string) (*Runtime, error) {
-
-	content, err := os.ReadFile(fmt.Sprintf("%s/%s.json", config.INTERNAL_SUBAGENTS_PATH, agentName))
+func (r *Runtime) NewChildRuntime(
+	agentName string,
+	parent *Runtime,
+) (*Runtime, error) {
+	content, err := os.ReadFile(
+		fmt.Sprintf("%s/%s.json", config.Cfg.InternalSubagentsPath, agentName),
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	var subAgentDefinition SubAgent
 	err = json.Unmarshal(content, &subAgentDefinition)
-
 	if err != nil {
 		return nil, err
 	}
 
 	tools, err := GetToolsforSubAgent(subAgentDefinition.AllowedTools)
 
-	childAgent := NewAgent(
-		subAgentDefinition.SystemPrompt, &tools, llm.NewOpenRouterProvider(),
-	)
-
-	return &Runtime{
+	runtime := &Runtime{
 		Status:        Idle,
 		Workspace:     r.Workspace,
 		Executor:      r.Executor,
-		Agent:         childAgent,
 		Session:       r.Session,
 		ChildRuntime:  true,
 		SkillRegistry: r.SkillRegistry,
-	}, nil
+		Registry:      parent.Registry,
+	}
+
+	childAgent := NewAgent(
+		subAgentDefinition.SystemPrompt,
+		&tools,
+		&runtime.Registry,
+		&r.Validator,
+	)
+
+	runtime.Agent = childAgent
+
+	return runtime, nil
 }
 
 func (r *Runtime) loadTools(path string) error {
 	entries, err := os.ReadDir(path)
-
 	if err != nil {
 		return err
 	}
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			content, err := os.ReadFile(fmt.Sprintf("%s/%s/%s.json", path, entry.Name(), entry.Name()))
+			content, err := os.ReadFile(
+				fmt.Sprintf("%s/%s/%s.json", path, entry.Name(), entry.Name()),
+			)
 			if err != nil {
 				fmt.Println("Error reading file:", err)
 				continue
@@ -204,22 +270,30 @@ type SkillToolArgs struct {
 	Args      string `json:"args,omitempty"`
 }
 
-func (r *Runtime) InvokeSubAgent(tool ToolCallResponseData) (llm.Message, error) {
+func (r *Runtime) InvokeSubAgent(
+	tool ToolCallResponseData,
+) (llm.Message, error) {
 	var args SubagentToolArgs
 	if err := json.Unmarshal(tool.Arguments, &args); err != nil {
 		return llm.Message{
 			Role:       "tool",
 			ToolCallId: tool.Id,
-			Content:    fmt.Sprintf(`{"success":false,"error":"invalid subagent args: %s"}`, err.Error()),
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"invalid subagent args: %s"}`,
+				err.Error(),
+			),
 		}, nil
 	}
 
-	childRuntime, err := r.NewChildRuntime(args.AgentName)
+	childRuntime, err := r.NewChildRuntime(args.AgentName, r)
 	if err != nil {
 		return llm.Message{
 			Role:       "tool",
 			ToolCallId: tool.Id,
-			Content:    fmt.Sprintf(`{"success":false,"error":"failed to create subagent: %s"}`, err.Error()),
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"failed to create subagent: %s"}`,
+				err.Error(),
+			),
 		}, nil
 	}
 
@@ -230,7 +304,10 @@ func (r *Runtime) InvokeSubAgent(tool ToolCallResponseData) (llm.Message, error)
 		return llm.Message{
 			Role:       "tool",
 			ToolCallId: tool.Id,
-			Content:    fmt.Sprintf(`{"success":false,"error":"subagent failed: %s"}`, err.Error()),
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"subagent failed: %s"}`,
+				err.Error(),
+			),
 		}, nil
 	}
 
@@ -253,7 +330,9 @@ func (r *Runtime) InvokeSubAgent(tool ToolCallResponseData) (llm.Message, error)
 // just at the start) that resolves to a registered enabled skill. Returns the
 // skill name and the rest of the prompt with the token removed; ok=false if
 // no enabled skill is referenced.
-func (r *Runtime) ParseSkillCommand(prompt string) (name, args string, ok bool) {
+func (r *Runtime) ParseSkillCommand(
+	prompt string,
+) (name, args string, ok bool) {
 	if r.SkillRegistry == nil {
 		return "", "", false
 	}
@@ -302,7 +381,10 @@ func (r *Runtime) skillSummaries() []prompts.SkillSummary {
 	enabled := r.SkillRegistry.ListEnabled()
 	out := make([]prompts.SkillSummary, 0, len(enabled))
 	for _, s := range enabled {
-		out = append(out, prompts.SkillSummary{Name: s.Name, Description: s.Description})
+		out = append(
+			out,
+			prompts.SkillSummary{Name: s.Name, Description: s.Description},
+		)
 	}
 	return out
 }
@@ -313,18 +395,24 @@ func (r *Runtime) refreshSystemPrompt() {
 	}
 	prompt := prompts.BuildSystemPrompt(r.skillSummaries())
 	r.Agent.SystemPrompt = prompt
-	if len(r.Agent.Conversation.Messages) > 0 && r.Agent.Conversation.Messages[0].Role == "system" {
+	if len(r.Agent.Conversation.Messages) > 0 &&
+		r.Agent.Conversation.Messages[0].Role == "system" {
 		r.Agent.Conversation.Messages[0].Content = prompt
 	}
 }
 
-func (r *Runtime) invokeSkill(tool ToolCallResponseData) (llm.Message, *string, error) {
+func (r *Runtime) invokeSkill(
+	tool ToolCallResponseData,
+) (llm.Message, *string, error) {
 	var args SkillToolArgs
 	if err := json.Unmarshal(tool.Arguments, &args); err != nil {
 		return llm.Message{
 			Role:       "tool",
 			ToolCallId: tool.Id,
-			Content:    fmt.Sprintf(`{"success":false,"error":"invalid skill args: %s"}`, err.Error()),
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"invalid skill args: %s"}`,
+				err.Error(),
+			),
 		}, nil, nil
 	}
 
@@ -341,7 +429,10 @@ func (r *Runtime) invokeSkill(tool ToolCallResponseData) (llm.Message, *string, 
 		return llm.Message{
 			Role:       "tool",
 			ToolCallId: tool.Id,
-			Content:    fmt.Sprintf(`{"success":false,"error":"unknown or disabled skill: %s"}`, args.SkillName),
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"unknown or disabled skill: %s"}`,
+				args.SkillName,
+			),
 		}, nil, nil
 	}
 
@@ -364,7 +455,6 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		Role:    "user",
 		Content: prompt,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +497,6 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 			case ActionSubagent:
 				var args SubagentToolArgs
 				err := json.Unmarshal((*action.ToolCall).Arguments, &args)
-
 				if err != nil {
 					return nil, err
 				}
@@ -430,10 +519,12 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 					var args SkillToolArgs
 					_ = json.Unmarshal((*action.ToolCall).Arguments, &args)
 					pendingSkillPrompts = append(pendingSkillPrompts, *resolved)
-					pendingSkillNames = append(pendingSkillNames, args.SkillName)
+					pendingSkillNames = append(
+						pendingSkillNames,
+						args.SkillName,
+					)
 				}
 			}
-
 		}
 
 		for i, body := range pendingSkillPrompts {
@@ -445,19 +536,17 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		}
 
 		conv, err := r.Agent.RunStep(messages...)
-
 		if err != nil {
 			return nil, err
 		}
 
-		r.InputTokens += conv.PromptTokens
-		r.OutputTokens += conv.CompletionTokens
+		r.InputTokens += conv.Usage.InputTokens
+		r.OutputTokens += conv.Usage.OutputTokens
 	}
 
 	r.Conversation.Messages = append(r.Conversation.Messages, conv.Messages...)
-	r.Conversation.PromptTokens += r.InputTokens
-	r.Conversation.CompletionTokens += r.OutputTokens
-	r.Conversation.TotalTokens += r.InputTokens + r.OutputTokens
+	r.Conversation.Usage.InputTokens += r.InputTokens
+	r.Conversation.Usage.OutputTokens += r.OutputTokens
 
 	r.persistSessionHistory()
 	r.Executor.SetActiveSkill("")

@@ -54,21 +54,19 @@ func Iniaitalize(workspace *workspace.Workspace) AppModel {
 	commands := []string{"/models", "/help", "/exit"}
 	commandDescriptions := []string{"Select model", "Get help", "Exit ZipCode"}
 
-	models := config.ModelNames
-	modelDescriptions := config.ModelDescriptions
+	models := config.Cfg.ModelNames
 
 	return AppModel{
-		Workspace:           workspace,
-		Runtime:             &runtime,
-		Prompt:              input,
-		ViewPort:            vp,
-		CommandsMenu:        components.CreateMenu(commands, commandDescriptions),
-		ModelsMenu:          components.CreateMenu(models, modelDescriptions),
+		Workspace:    workspace,
+		Runtime:      &runtime,
+		Prompt:       input,
+		ViewPort:     vp,
+		CommandsMenu: components.CreateMenu(commands, commandDescriptions),
+
 		Commands:            commands,
 		CommandDescriptions: commandDescriptions,
 		Models:              models,
-		ModelDescriptions:   modelDescriptions,
-		StatusBar:           components.CreateStatusBar(workspace.RootPath, string(config.CurrentModel)),
+		StatusBar:           components.CreateStatusBar(workspace.RootPath, config.Cfg.CurrentModel),
 		ActiveConversation:  "\n",
 	}
 }
@@ -151,7 +149,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if a.ModelsMenu.IsVisible() {
 				selectedModel := a.Models[a.ModelsMenu.GetSelectedIndex()]
-				config.SetCurrentModel(selectedModel)
+				config.Cfg.SetCurrentModel(selectedModel)
 				a.StatusBar.SetModel(selectedModel)
 			}
 

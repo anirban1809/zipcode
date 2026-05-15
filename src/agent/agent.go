@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"fmt"
+	"zipcode/src/config"
+	"zipcode/src/credentials"
 	llm "zipcode/src/llm/provider"
 	"zipcode/src/tools"
 )
@@ -11,16 +14,24 @@ type Agent struct {
 	Conversation llm.Conversation
 	LastResponse llm.Message
 	Tools        *[]tools.Tool
-	LLM          *llm.OpenRouterProvider
+	Registry     *llm.Registry
 	initial      bool
+	Validator    credentials.Validator
+	Config       config.Config
 }
 
-func NewAgent(systemPrompt string, tools *[]tools.Tool, llm *llm.OpenRouterProvider) Agent {
+func NewAgent(
+	systemPrompt string,
+	tools *[]tools.Tool,
+	registry *llm.Registry,
+	validator *credentials.Validator,
+) Agent {
 	return Agent{
 		SystemPrompt: systemPrompt,
 		Tools:        tools,
-		LLM:          llm,
 		initial:      false,
+		Validator:    *validator,
+		Registry:     registry,
 	}
 }
 
@@ -51,7 +62,32 @@ func (a *Agent) RunStep(messages ...llm.Message) (*llm.Conversation, error) {
 
 	a.Conversation.Messages = append(a.Conversation.Messages, messages...)
 	a.Conversation.Tools = *a.Tools
-	conv, err := a.LLM.Chat(&a.Conversation)
+
+	if config.Cfg.ActiveProviderName == "" {
+		return nil, fmt.Errorf(
+			"Error: No active provider configured, configure a provider from /providers to proceed",
+		)
+	}
+
+	validationResult := a.Validator.ValidateLazy(
+		llm.ProviderName(config.Cfg.ActiveProviderName),
+	)
+
+	if validationResult.Status == credentials.Rejected {
+		return nil, fmt.Errorf(
+			"Error: Failed to validate credentials for %s",
+			config.Cfg.ActiveProviderName,
+		)
+	}
+
+	if validationResult.Status == credentials.NotConfigured {
+		return nil, fmt.Errorf(
+			"Error: No credentials have been configured for %s",
+			config.Cfg.ActiveProviderName,
+		)
+	}
+
+	conv, err := a.Chat(&a.Conversation)
 
 	if err != nil {
 		return nil, err
@@ -59,4 +95,27 @@ func (a *Agent) RunStep(messages ...llm.Message) (*llm.Conversation, error) {
 
 	a.Conversation = *conv
 	return conv, nil
+}
+
+func (a *Agent) Chat(prev *llm.Conversation) (*llm.Conversation, error) {
+	var chatRequest llm.ChatRequest
+
+	chatRequest.Messages = prev.Messages
+	chatRequest.Model = config.Cfg.CurrentModel
+	chatRequest.Tools = prev.Tools
+
+	currentProvider := a.Registry.GetProvider(
+		llm.ProviderName(config.Cfg.ActiveProviderName),
+	)
+
+	value, err := currentProvider.Complete(chatRequest)
+
+	if err != nil {
+		return nil, err
+	}
+
+	prev.Messages = append(prev.Messages, value.Message)
+	prev.Usage = value.Usage
+
+	return prev, nil
 }

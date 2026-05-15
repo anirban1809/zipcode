@@ -5,6 +5,8 @@ import (
 
 	"zipcode/src/agent"
 	"zipcode/src/config"
+	llm "zipcode/src/llm/provider"
+	"zipcode/src/view/viewctx"
 
 	"github.com/anirban1809/tuix/tuix"
 )
@@ -12,20 +14,50 @@ import (
 func ModelSelection(props tuix.Props) tuix.Element {
 	setActiveView := props.Get("setActiveView").(func(string))
 	visible := props.Get("visible").(bool)
+	context := tuix.UseContext(viewctx.MainContext)
+
+	items := []string{}
+	provider := context.Runtime.Registry.GetProvider(
+		llm.ProviderName(config.Cfg.ActiveProviderName),
+	)
+	if provider != nil {
+		for _, m := range provider.Models() {
+			items = append(items, m.ID)
+		}
+	}
 
 	return tuix.Box(
-		tuix.Props{Direction: tuix.Column, Padding: [4]int{1, 1, 1, 1}}, tuix.NewStyle(),
+		tuix.Props{
+			Direction: tuix.Column,
+			Padding:   [4]int{1, 1, 1, 1},
+		},
+		tuix.NewStyle(),
 		tuix.Text("Choose your model:", tuix.NewStyle()),
 		tuix.Text("", tuix.NewStyle()),
 		Menu(tuix.Props{Values: map[string]any{
-			"items":    config.ModelNames,
+			"items":    items,
 			"visible":  visible,
 			"viewSize": 6,
-		}}, func(selected string) {
-			config.CurrentModel = selected
-			agent.EventManager.WriteToChannel(agent.NOTIFICATION_CHANNEL, fmt.Sprintf("Current model changed to: %s", selected))
+		}}, func(selected string, _ int) {
+			config.Cfg.CurrentModel = selected
+			if config.Cfg.ProviderModels == nil {
+				config.Cfg.ProviderModels = map[string]string{}
+			}
+			config.Cfg.ProviderModels[config.Cfg.ActiveProviderName] = selected
+			config.Cfg.Save()
+			agent.EventManager.WriteToChannel(
+				agent.NOTIFICATION_CHANNEL,
+				agent.Notification{
+					Type: agent.INFO,
+					Message: fmt.Sprintf(
+						"Current model changed to: %s",
+						selected,
+					),
+				},
+			)
+			context.SetFocusPrompt(true)
 			setActiveView("")
-		}),
+		}, nil),
 		tuix.Text("Press Enter to confirm, Esc to cancel", tuix.NewStyle()),
 	)
 }

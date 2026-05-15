@@ -6,6 +6,7 @@ import (
 	"zipcode/src/agent"
 	"zipcode/src/skills"
 	view "zipcode/src/ui/components/utils"
+	"zipcode/src/view/viewctx"
 
 	"github.com/anirban1809/tuix/tuix"
 )
@@ -14,10 +15,15 @@ func Skills(props tuix.Props) tuix.Element {
 	runtime, _ := props.Get("runtime").(*agent.Runtime)
 	visible, _ := props.Get("visible").(bool)
 	setActiveView, _ := props.Get("setActiveView").(func(string))
+	context := tuix.UseContext(viewctx.MainContext)
 
 	if runtime == nil || runtime.SkillRegistry == nil {
 		return tuix.Box(
-			tuix.Props{Direction: tuix.Column, Padding: [4]int{1, 1, 1, 1}}, tuix.NewStyle(),
+			tuix.Props{
+				Direction: tuix.Column,
+				Padding:   [4]int{1, 1, 1, 1},
+			},
+			tuix.NewStyle(),
 			tuix.Text("Skills are unavailable.", tuix.NewStyle()),
 			tuix.Text("Press Esc to go back.", tuix.NewStyle()),
 		)
@@ -27,12 +33,19 @@ func Skills(props tuix.Props) tuix.Element {
 
 	if len(allSkills) == 0 {
 		return tuix.Box(
-			tuix.Props{Direction: tuix.Column, Padding: [4]int{1, 1, 1, 1}}, tuix.NewStyle(),
+			tuix.Props{
+				Direction: tuix.Column,
+				Padding:   [4]int{1, 1, 1, 1},
+			},
+			tuix.NewStyle(),
 			tuix.Text("All Skills", tuix.NewStyle()),
 			view.NewLine(),
 			tuix.Text("No skills found.", tuix.NewStyle()),
 			view.NewLine(),
-			tuix.Text("Create skills in .zipcode/skills/ or ~/.zipcode/skills/ as Markdown files.", tuix.NewStyle()),
+			tuix.Text(
+				"Create skills in .zipcode/skills/ or ~/.zipcode/skills/ as Markdown files.",
+				tuix.NewStyle(),
+			),
 			tuix.Text("Press Esc to go back.", tuix.NewStyle()),
 		)
 	}
@@ -43,18 +56,28 @@ func Skills(props tuix.Props) tuix.Element {
 		if !s.Enabled {
 			state = "off"
 		}
-		labels[i] = fmt.Sprintf("[%s] %-20s %-10s %s", state, s.Name, sourceLabel(s.Source), s.Description)
+		labels[i] = fmt.Sprintf(
+			"[%s] %-20s %-10s %s",
+			state,
+			s.Name,
+			sourceLabel(s.Source),
+			s.Description,
+		)
 	}
 
 	return tuix.Box(
-		tuix.Props{Direction: tuix.Column, Padding: [4]int{1, 1, 1, 1}}, tuix.NewStyle(),
+		tuix.Props{
+			Direction: tuix.Column,
+			Padding:   [4]int{1, 1, 1, 1},
+		},
+		tuix.NewStyle(),
 		tuix.Text("Skills", tuix.NewStyle()),
 		view.NewLine(),
 		Menu(tuix.Props{Values: map[string]any{
 			"items":    labels,
 			"visible":  visible,
 			"viewSize": 8,
-		}}, func(selected string) {
+		}}, func(selected string, _ int) {
 			for i, label := range labels {
 				if label != selected {
 					continue
@@ -66,12 +89,16 @@ func Skills(props tuix.Props) tuix.Element {
 					_ = runtime.SkillRegistry.Enable(s.Name)
 				}
 				if setActiveView != nil {
+					context.SetFocusPrompt(true)
 					setActiveView("")
 				}
 				return
 			}
-		}),
-		tuix.Text("Enter to toggle. Edit skill files in your editor. Esc to go back.", tuix.NewStyle()),
+		}, nil),
+		tuix.Text(
+			"Enter to toggle. Edit skill files in your editor. Esc to go back.",
+			tuix.NewStyle(),
+		),
 	)
 }
 

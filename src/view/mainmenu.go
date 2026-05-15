@@ -3,9 +3,10 @@ package view
 import (
 	"os"
 	"strings"
-	"zipcode/src/agent"
+
 	"zipcode/src/utils"
 	view "zipcode/src/view/components"
+	"zipcode/src/view/viewctx"
 
 	"github.com/anirban1809/tuix/tuix"
 )
@@ -30,21 +31,27 @@ func MainMenu(props tuix.Props) tuix.Element {
 	setActiveView := props.Get("setActiveView").(func(string))
 	submitPrompt := props.Get("submitPrompt").(func(string))
 	prompt := props.Get("prompt").(string)
-	runtime := props.Get("runtime").(*agent.Runtime)
+	context := tuix.UseContext(viewctx.MainContext)
+	setFocusPrompt := props.Get("setFocusPrompt").(func(bool))
 
-	var commands = []Command{
+	commands := []Command{
 		{Name: "/models", Kind: CmdView},
 		{Name: "/skills", Kind: CmdView},
 		{Name: "/agents", Kind: CmdView},
 		{Name: "/sessions", Kind: CmdView},
 		{Name: "/settings", Kind: CmdView},
-		{Name: "/about", Kind: CmdPrompt, Prompt: "Tell me about this project."},
+		{
+			Name:   "/about",
+			Kind:   CmdPrompt,
+			Prompt: "Tell me about this project.",
+		},
 		{Name: "/exit", Kind: CmdAction, Run: func() { os.Exit(0) }},
 		{Name: "/clear", Kind: CmdAction, Run: func() { /* clear outputs */ }},
+		{Name: "/providers", Kind: CmdView},
 	}
 
-	if runtime != nil && runtime.SkillRegistry != nil {
-		for _, s := range runtime.SkillRegistry.ListEnabled() {
+	if context.Runtime != nil && context.Runtime.SkillRegistry != nil {
+		for _, s := range context.Runtime.SkillRegistry.ListEnabled() {
 			name := "/" + s.Name
 			commands = append(commands, Command{
 				Name:   name,
@@ -70,6 +77,7 @@ func MainMenu(props tuix.Props) tuix.Element {
 	})
 
 	if activeView != "" && tuix.CurrentKey.Code == tuix.KeyEscape {
+		setFocusPrompt(true)
 		setActiveView("")
 	}
 
@@ -81,14 +89,24 @@ func MainMenu(props tuix.Props) tuix.Element {
 	skillsView := view.Skills(tuix.Props{Values: map[string]any{
 		"setActiveView": setActiveView,
 		"visible":       activeView == "/skills",
-		"runtime":       runtime,
+		"runtime":       context.Runtime,
 	}})
+
 	agentsView := view.Agent(tuix.Props{})
 	sessionsView := view.Sessions(tuix.Props{Values: map[string]any{
 		"setActiveView": setActiveView,
 		"visible":       activeView == "/sessions",
-		"runtime":       runtime,
+		"runtime":       context.Runtime,
 	}})
+
+	providersView := view.Providers(
+		tuix.Props{
+			Values: map[string]any{
+				"visible":       activeView == "/providers",
+				"setActiveView": setActiveView,
+			},
+		},
+	)
 
 	if activeView == "/models" {
 		return modelSelection
@@ -110,16 +128,24 @@ func MainMenu(props tuix.Props) tuix.Element {
 		return sessionsView
 	}
 
-	commandNames := utils.Map(filteredItems, func(item Command, index int) string {
-		return item.Name
-	})
+	if activeView == "/providers" {
+		return providersView
+	}
+
+	commandNames := utils.Map(
+		filteredItems,
+		func(item Command, index int) string {
+			return item.Name
+		},
+	)
 
 	return view.Menu(tuix.Props{
 		Values: map[string]any{
 			"items":   commandNames,
 			"visible": activeView == "",
 		},
-	}, func(selected string) {
+	}, func(selected string, _ int) {
+		setFocusPrompt(false)
 		cmd := findCommand(selected) // lookup in `commands`
 		switch cmd.Kind {
 		case CmdView:
@@ -130,5 +156,5 @@ func MainMenu(props tuix.Props) tuix.Element {
 		case CmdAction:
 			cmd.Run()
 		}
-	})
+	}, nil)
 }

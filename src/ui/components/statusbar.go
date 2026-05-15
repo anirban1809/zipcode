@@ -104,7 +104,7 @@ func (s StatusBar) convertTokenValues() (string, string) {
 }
 
 func renderStatusBar(width int, s StatusBar) string {
-	appVersion := fmt.Sprintf("ZipCode v%s ", config.APP_VERSION)
+	appVersion := fmt.Sprintf("ZipCode v%s ", config.Cfg.AppVersion)
 
 	spinnerView := ""
 

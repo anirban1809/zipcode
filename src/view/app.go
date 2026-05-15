@@ -15,6 +15,7 @@ import (
 
 var promptChan = make(chan string)
 var clearOutputsChan = make(chan struct{}, 1)
+var queuedPrompts = make(chan string, 32)
 
 func App(props tuix.Props) tuix.Element {
 	prompt, setPrompt := tuix.UseState("")
@@ -36,6 +37,8 @@ func App(props tuix.Props) tuix.Element {
 	// showProvidersView, setShowProvidersView := tuix.UseState(false)
 	fileDiff, setFileDiff := tuix.UseState(agent.FileChangeEvent{})
 	focusPrompt, setFocusPrompt := tuix.UseState(true)
+	planStatus, setPlanStatus := tuix.UseState(agent.PlanStatusEvent{})
+	queuedCount, setQueuedCount := tuix.UseState(0)
 
 	runtime := props.Get("runtime").(*agent.Runtime)
 
@@ -66,8 +69,29 @@ func App(props tuix.Props) tuix.Element {
 		}()
 	}
 
-	if tuix.CurrentKey.Code == tuix.KeyEnter && !activeSession && !menuVisible {
-		submitPrompt(prompt)
+	queuePrompt := func(p string) {
+		select {
+		case queuedPrompts <- p:
+			setQueuedCount(queuedCount + 1)
+			setPrompt("")
+		default:
+			agent.EventManager.WriteToChannel(
+				agent.NOTIFICATION_CHANNEL,
+				agent.Notification{
+					Type:    agent.ERROR,
+					Message: "Prompt queue is full; wait for the active plan to finish.",
+				},
+			)
+		}
+	}
+
+	canSubmit := tuix.CurrentKey.Code == tuix.KeyEnter && !menuVisible
+	if canSubmit {
+		if !activeSession {
+			submitPrompt(prompt)
+		} else if planStatus.Active && strings.TrimSpace(prompt) != "" {
+			queuePrompt(prompt)
+		}
 	}
 
 	tuix.UseEffect(func() func() {
@@ -113,6 +137,13 @@ func App(props tuix.Props) tuix.Element {
 						}
 					}
 					setNotification(notif)
+				}
+			}()
+
+			go func() {
+				for {
+					ev := agent.EventManager.ReadFromChannel(agent.PLAN_STATUS_CHANNEL).(agent.PlanStatusEvent)
+					setPlanStatus(ev)
 				}
 			}()
 
@@ -208,6 +239,12 @@ func App(props tuix.Props) tuix.Element {
 						}
 						setActiveSession(false)
 
+						select {
+						case queued := <-queuedPrompts:
+							setQueuedCount(queuedCount - 1)
+							go submitPrompt(queued)
+						default:
+						}
 					}
 
 					if ev.EventType != agent.Error {
@@ -306,6 +343,18 @@ func App(props tuix.Props) tuix.Element {
 			)
 			if notification.Message != "" {
 				children = append(children, notificationEl)
+			}
+
+			if len(planStatus.Steps) > 0 {
+				children = append(children, view.PlanView(tuix.Props{
+					Values: map[string]any{"plan": planStatus},
+				}))
+				if queuedCount > 0 {
+					children = append(children, tuix.Text(
+						fmt.Sprintf("Queued prompts: %d (will run after the plan finishes)", queuedCount),
+						tuix.NewStyle().Foreground(tuix.Hex("#9ad8ff")),
+					))
+				}
 			}
 
 			children = append(children, tuix.Box(

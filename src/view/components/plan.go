@@ -1,0 +1,94 @@
+package view
+
+import (
+	"fmt"
+	"zipcode/src/agent"
+
+	"github.com/anirban1809/tuix/tuix"
+)
+
+func PlanView(props tuix.Props) tuix.Element {
+	plan, ok := props.Get("plan").(agent.PlanStatusEvent)
+	if !ok || len(plan.Steps) == 0 {
+		return tuix.Box(tuix.Props{}, tuix.NewStyle())
+	}
+
+	completed := 0
+	for _, s := range plan.Steps {
+		if s.Status == agent.PlanStepCompleted {
+			completed++
+		}
+	}
+
+	title := plan.Title
+	if title == "" {
+		title = "Plan"
+	}
+
+	header := tuix.Box(
+		tuix.Props{Direction: tuix.Row, Gap: 1},
+		tuix.NewStyle(),
+		tuix.Text(
+			fmt.Sprintf("Plan: %s", title),
+			tuix.NewStyle().Foreground(tuix.Hex("#c8c8c8")).Bold(true),
+		),
+		tuix.Text(
+			fmt.Sprintf("(%d / %d)", completed, len(plan.Steps)),
+			tuix.NewStyle().Foreground(tuix.Hex("#848484")),
+		),
+	)
+
+	rows := []tuix.Element{header, tuix.Text("", tuix.NewStyle())}
+
+	for i, s := range plan.Steps {
+		marker, style := stepGlyph(s.Status)
+		rows = append(rows, tuix.Box(
+			tuix.Props{Direction: tuix.Row, Gap: 1},
+			tuix.NewStyle(),
+			tuix.Text(marker, style),
+			tuix.Text(
+				fmt.Sprintf("%d. %s", i+1, s.Outline),
+				stepLabelStyle(s.Status),
+			),
+		))
+	}
+
+	return tuix.Box(
+		tuix.Props{Direction: tuix.Column, Padding: [4]int{0, 1, 0, 1}},
+		tuix.NewStyle().Border(tuix.Border{
+			Top: true, Bottom: true, Left: true, Right: true,
+			Color: tuix.Hex("#3a3a3a"),
+		}),
+		rows...,
+	)
+}
+
+func stepGlyph(s agent.PlanStepStatus) (string, tuix.Style) {
+	switch s {
+	case agent.PlanStepCompleted:
+		return "✓", tuix.NewStyle().Foreground(tuix.Hex("#67c27a")).Bold(true)
+	case agent.PlanStepRunning:
+		glyph := "·"
+		if tuix.CurrentTick {
+			glyph = "▸"
+		}
+		return glyph, tuix.NewStyle().Foreground(tuix.Hex("#64c3ff")).Bold(true)
+	case agent.PlanStepFailed:
+		return "✕", tuix.NewStyle().Foreground(tuix.Hex("#e06c75")).Bold(true)
+	default:
+		return "·", tuix.NewStyle().Foreground(tuix.Hex("#5a5a5a"))
+	}
+}
+
+func stepLabelStyle(s agent.PlanStepStatus) tuix.Style {
+	switch s {
+	case agent.PlanStepCompleted:
+		return tuix.NewStyle().Foreground(tuix.Hex("#a8a8a8"))
+	case agent.PlanStepRunning:
+		return tuix.NewStyle().Foreground(tuix.Hex("#e8e8e8")).Bold(true)
+	case agent.PlanStepFailed:
+		return tuix.NewStyle().Foreground(tuix.Hex("#e06c75"))
+	default:
+		return tuix.NewStyle().Foreground(tuix.Hex("#6e6e6e"))
+	}
+}

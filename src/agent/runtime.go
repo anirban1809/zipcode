@@ -52,6 +52,7 @@ type Runtime struct {
 	SkillWatcher    *skills.Watcher
 	CredStore       *credentials.Store
 	Validator       credentials.Validator
+	activePlan      *Plan
 }
 
 func NewRuntime(workspace *workspace.Workspace) Runtime {
@@ -71,6 +72,7 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 				tools.FileWriteTool,
 				tools.SubAgentTool,
 				tools.InvokeSkillTool,
+				tools.CreatePlanTool,
 			},
 		),
 		SkillRegistry: registry,
@@ -134,7 +136,11 @@ func NewRuntime(workspace *workspace.Workspace) Runtime {
 		runtime.Tools,
 		tools.FileWriteTool,
 		tools.InvokeSkillTool,
+		tools.CreatePlanTool,
 	)
+	if !config.Cfg.Headless {
+		runtime.Tools = append(runtime.Tools, tools.QuestionTool)
+	}
 	runtime.loadTools(config.Cfg.InternalToolPath)
 	runtime.loadTools(config.Cfg.ExternalToolPath)
 
@@ -395,6 +401,135 @@ type SkillToolArgs struct {
 	Args      string `json:"args,omitempty"`
 }
 
+const stepPromptSystem = `You convert one step outline from a plan into a concrete instruction for an autonomous coding agent that operates in the same workspace.
+Rules:
+- Output ONLY the instruction text. No preamble, no markdown headings, no "Step N:" prefix.
+- Make it self-contained — do not reference "the previous step" by index. Restate any concrete facts (paths, symbols, decisions) you need from prior output.
+- Stay within this step's scope. Do not anticipate later steps.
+- Be specific: name files, functions, or symbols rather than vague pronouns.`
+
+func (r *Runtime) emitPlanStatus() {
+	if r.activePlan == nil {
+		return
+	}
+	EventManager.WriteToChannel(PLAN_STATUS_CHANNEL, r.activePlan.snapshot())
+}
+
+func (r *Runtime) generateStepPrompt(idx int) (string, error) {
+	if r.activePlan == nil {
+		return "", fmt.Errorf("no active plan")
+	}
+	plan := r.activePlan
+	if idx < 0 || idx >= len(plan.Steps) {
+		return "", fmt.Errorf("step index out of range")
+	}
+	if config.Cfg.ActiveProviderName == "" {
+		return "", fmt.Errorf("no active provider configured")
+	}
+	provider := r.Registry.GetProvider(llm.ProviderName(config.Cfg.ActiveProviderName))
+	if provider == nil {
+		return "", fmt.Errorf("provider %q not registered", config.Cfg.ActiveProviderName)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Overall task title: ")
+	sb.WriteString(plan.Title)
+	sb.WriteString("\n\nPlan outline:\n")
+	for i, s := range plan.Steps {
+		marker := "  -"
+		if i == idx {
+			marker = "  >"
+		}
+		fmt.Fprintf(&sb, "%s %d. %s\n", marker, i+1, s.Outline)
+	}
+	if idx > 0 {
+		prev := plan.Steps[idx-1]
+		sb.WriteString("\nPrevious step (")
+		sb.WriteString(prev.Outline)
+		sb.WriteString(") output:\n")
+		sb.WriteString(prev.Output)
+		sb.WriteString("\n")
+	}
+	fmt.Fprintf(&sb, "\nWrite the concrete prompt for step %d (%q).", idx+1, plan.Steps[idx].Outline)
+
+	resp, err := provider.Complete(llm.ChatRequest{
+		Model: config.Cfg.CurrentModel,
+		Messages: []llm.Message{
+			{Role: "system", Content: stepPromptSystem},
+			{Role: "user", Content: sb.String()},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	out := strings.TrimSpace(resp.Message.Content)
+	if out == "" {
+		return "", fmt.Errorf("provider returned empty step prompt")
+	}
+	return out, nil
+}
+
+func (r *Runtime) handlePlanAction(
+	tc *ToolCallResponseData,
+) (llm.Message, *string, error) {
+	var args tools.CreatePlanInput
+	if err := json.Unmarshal(tc.Arguments, &args); err != nil {
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tc.Id,
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"invalid plan args: %s"}`,
+				err.Error(),
+			),
+		}, nil, nil
+	}
+	if len(args.Steps) == 0 {
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tc.Id,
+			Content:    `{"success":false,"error":"plan requires at least one step"}`,
+		}, nil, nil
+	}
+	if r.activePlan != nil && r.activePlan.Active {
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tc.Id,
+			Content:    `{"success":false,"error":"a plan is already active"}`,
+		}, nil, nil
+	}
+
+	r.activePlan = newPlan(args.Title, args.Steps)
+	r.emitPlanStatus()
+
+	firstPrompt, err := r.generateStepPrompt(0)
+	if err != nil {
+		r.activePlan.Active = false
+		r.emitPlanStatus()
+		return llm.Message{
+			Role:       "tool",
+			ToolCallId: tc.Id,
+			Content: fmt.Sprintf(
+				`{"success":false,"error":"failed to generate first step prompt: %s"}`,
+				err.Error(),
+			),
+		}, nil, nil
+	}
+	r.activePlan.Steps[0].Prompt = firstPrompt
+	r.activePlan.Steps[0].Status = PlanStepRunning
+	r.emitPlanStatus()
+
+	ack := llm.Message{
+		Role:       "tool",
+		ToolCallId: tc.Id,
+		Content: fmt.Sprintf(
+			`{"success":true,"title":%q,"steps":%d}`,
+			args.Title,
+			len(args.Steps),
+		),
+	}
+	return ack, &firstPrompt, nil
+}
+
 func (r *Runtime) InvokeSubAgent(
 	tool ToolCallResponseData,
 ) (llm.Message, error) {
@@ -608,6 +743,57 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		}
 
 		if status == ExecutionCompleted {
+			if r.activePlan != nil && r.activePlan.Active {
+				cur := r.activePlan.Current
+				if cur < len(r.activePlan.Steps) {
+					r.activePlan.Steps[cur].Output = lastResponse.Content
+					r.activePlan.Steps[cur].Status = PlanStepCompleted
+					r.activePlan.Current++
+					r.emitPlanStatus()
+				}
+
+				if r.activePlan.Current >= len(r.activePlan.Steps) {
+					r.activePlan.Active = false
+					r.emitPlanStatus()
+					r.Status = Idle
+					break
+				}
+
+				nextPrompt, perr := r.generateStepPrompt(r.activePlan.Current)
+				if perr != nil {
+					r.activePlan.Steps[r.activePlan.Current].Status = PlanStepFailed
+					r.activePlan.Active = false
+					r.emitPlanStatus()
+					go EventManager.WriteToChannel(
+						NOTIFICATION_CHANNEL,
+						Notification{
+							Type: ERROR,
+							Message: fmt.Sprintf(
+								"Plan step prompt generation failed: %s",
+								perr.Error(),
+							),
+						},
+					)
+					r.Status = Idle
+					break
+				}
+				r.activePlan.Steps[r.activePlan.Current].Prompt = nextPrompt
+				r.activePlan.Steps[r.activePlan.Current].Status = PlanStepRunning
+				r.emitPlanStatus()
+
+				conv, err = r.Agent.RunStep(llm.Message{
+					Role:    "user",
+					Content: nextPrompt,
+				})
+				if err != nil {
+					return nil, err
+				}
+				r.InputTokens += conv.Usage.InputTokens
+				r.CachedInputTokens += conv.Usage.CachedInputTokens
+				r.OutputTokens += conv.Usage.OutputTokens
+				continue
+			}
+
 			r.Status = Idle
 			break
 		}
@@ -615,6 +801,7 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 		messages := []llm.Message{}
 		var pendingSkillPrompts []string
 		var pendingSkillNames []string
+		var pendingPlanPrompts []string
 
 		for _, action := range actions {
 			switch action.Type {
@@ -661,6 +848,16 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 						args.SkillName,
 					)
 				}
+
+			case ActionPlan:
+				ack, firstPrompt, err := r.handlePlanAction(action.ToolCall)
+				if err != nil {
+					return nil, err
+				}
+				messages = append(messages, ack)
+				if firstPrompt != nil {
+					pendingPlanPrompts = append(pendingPlanPrompts, *firstPrompt)
+				}
 			}
 		}
 
@@ -672,7 +869,14 @@ func (r *Runtime) Run(prompt string) (*llm.Message, error) {
 			r.Executor.SetActiveSkill(pendingSkillNames[i])
 		}
 
-		conv, err := r.Agent.RunStep(messages...)
+		for _, body := range pendingPlanPrompts {
+			messages = append(messages, llm.Message{
+				Role:    "user",
+				Content: body,
+			})
+		}
+
+		conv, err = r.Agent.RunStep(messages...)
 		if err != nil {
 			return nil, err
 		}

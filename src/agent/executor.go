@@ -66,6 +66,10 @@ func (e *Executor) IsSkillTool(name string) bool {
 	return name == "invoke_skill"
 }
 
+func (e *Executor) IsPlanTool(name string) bool {
+	return name == "create_plan"
+}
+
 func NewExecutor(systemPrompt string, tools []tools.Tool) *Executor {
 	return &Executor{
 		EventChannel:   make(chan ResponseEvent),
@@ -118,6 +122,7 @@ const (
 	ActionToolCall ExecutionActionType = "tool_call"
 	ActionSubagent ExecutionActionType = "subagent"
 	ActionSkill    ExecutionActionType = "skill"
+	ActionPlan     ExecutionActionType = "plan"
 	ActionComplete ExecutionActionType = "complete"
 )
 
@@ -172,6 +177,10 @@ func (e *Executor) ProcessResponse(response llm.Message) ([]ExecutionAction, Exe
 
 			if e.IsSkillTool(tool.Name) {
 				actionType = ActionSkill
+			}
+
+			if e.IsPlanTool(tool.Name) {
+				actionType = ActionPlan
 			}
 
 			results = append(results, ExecutionAction{Type: actionType, ToolCall: &tool})
@@ -360,6 +369,49 @@ func (e *Executor) ProcessToolCall(input ToolCallResponseData) (*ToolResultReque
 			ToolCallID: input.Id,
 			Role:       "tool",
 			Content:    "denied",
+		}, nil
+
+	case "question":
+		if config.Cfg.Headless {
+			return &ToolResultRequestData{
+				ToolCallID: input.Id,
+				Role:       "tool",
+				Content:    `{"error":"question tool is not available in headless mode"}`,
+			}, nil
+		}
+
+		var questionInput tools.QuestionInput
+		err := json.Unmarshal(input.Arguments, &questionInput)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(questionInput.Options) < 2 {
+			return &ToolResultRequestData{
+				ToolCallID: input.Id,
+				Role:       "tool",
+				Content:    `{"error":"question tool requires at least two options"}`,
+			}, nil
+		}
+
+		EventManager.WriteToChannel(AGENT_OUTPUT_CHANNEL, ResponseEvent{
+			Question:  questionInput.Question,
+			Options:   questionInput.Options,
+			EventType: Tool,
+			Message:   questionInput.Question,
+		})
+
+		answer := EventManager.ReadFromChannel(AGENT_INPUT_CHANNEL).(string)
+
+		payload, err := json.Marshal(map[string]string{"selected": answer})
+		if err != nil {
+			return nil, err
+		}
+
+		return &ToolResultRequestData{
+			ToolCallID: input.Id,
+			Role:       "tool",
+			Content:    string(payload),
 		}, nil
 
 	}
